@@ -37,9 +37,14 @@ thaumoctopus-platform/
 ```bash
 node scripts/thaumoctopus/set-brand.mjs --check   # 校验 branding/product.json 产品配置
 node scripts/thaumoctopus/start-web.mjs           # 独立 DSH_HOME + 默认 profile 启动 Web UI
+pnpm run dev:thaumoctopus                         # 开发循环：重建 watcher + 品牌服务
 ```
 
 `start-web.mjs` 首次运行会把仓库里的 profile 复制到 `%LOCALAPPDATA%\Thaumoctopus\dsh-home\profiles\thaumoctopus`，之后用户态修改留在 dsh-home，不回写仓库。
+
+### 开发调试
+
+边开发边看效果用 `pnpm run dev:thaumoctopus`：它同时跑仓库标准重建 watcher（tsc / tsdown / vite）和品牌 profile 服务，改 `src/client` 插件代码、品牌 slot 或 Web shell 后浏览器自动刷新。一次启动挂整个开发时段，不是每个功能一条命令。首次使用前先完整构建一次（`pnpm run build`），之后冷启动大改动加 `--full-build`。注意 dev 循环运行期间不要再跑 `pnpm run build`，两者写同一批 `lib/` 产物。
 
 ## 下一步
 
