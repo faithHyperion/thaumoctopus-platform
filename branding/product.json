@@ -1,0 +1,20 @@
+{
+  "productName": "Thaumoctopus",
+  "chineseProductName": "章鱼智能体",
+  "shortName": "Thaumoctopus",
+  "internalName": "thaumoctopus",
+  "packageScope": "@thaumoctopus",
+  "vendor": "Thaumoctopus",
+  "version": "0.1.0",
+  "supportUrl": "https://support.thaumoctopus.com",
+  "siteUrl": "https://www.thaumoctopus.com",
+  "controlPlaneUrl": "https://api.thaumoctopus.com",
+  "registryUrl": "https://registry.thaumoctopus.com",
+  "defaultProfile": "thaumoctopus",
+  "locale": "zh-CN",
+  "theme": {
+    "logo": "./logo.svg",
+    "favicon": "./favicon.ico",
+    "primaryColor": "#2563eb"
+  }
+}

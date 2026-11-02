@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Thaumoctopus">
+  <g fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round">
+    <path d="M14 44c-2 6-6 8-9 9" />
+    <path d="M22 50c-1 5-4 8-7 10" />
+    <path d="M42 50c1 5 4 8 7 10" />
+    <path d="M50 44c2 6 6 8 9 9" />
+  </g>
+  <circle cx="32" cy="28" r="16" fill="#2563eb" />
+  <circle cx="26" cy="26" r="3" fill="#fff" />
+  <circle cx="38" cy="26" r="3" fill="#fff" />
+</svg>

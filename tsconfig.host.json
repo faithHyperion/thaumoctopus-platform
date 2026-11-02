@@ -271,6 +271,8 @@
     "scripts/client-bundle-purity.spec.ts"
   ],
   "references": [
+    { "path": "./packages/thaumoctopus/platform-bridge" },
+    { "path": "./packages/thaumoctopus/workbench" },
     { "path": "./packages/experimental/action-cards" },
     { "path": "./packages/experimental/creation-recommendations" },
     { "path": "./packages/experimental/plugin-recommendations" },

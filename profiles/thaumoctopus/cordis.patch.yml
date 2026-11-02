@@ -1,0 +1,6 @@
+# Thaumoctopus 默认 profile 的补丁层，在所有 bundle 层之后应用。
+# Phase 1：第一方品牌插件，占住侧栏品牌 slot。
+# Workbench（Phase 2）与 Platform Bridge（Phase 3）的挂载项随后续阶段添加。
+- insert:
+    - id: thaumoctopus-brand
+      name: '@thaumoctopus/brand'
