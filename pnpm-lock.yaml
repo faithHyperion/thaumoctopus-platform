@@ -17264,6 +17264,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:*
+        version: link:../../client/ui-conversation
       '@deepseek-ai/dsh-client-ui-renderer':
         specifier: workspace:*
         version: link:../../client/ui-renderer

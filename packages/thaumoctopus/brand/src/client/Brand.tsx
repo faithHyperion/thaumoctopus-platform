@@ -1,17 +1,23 @@
+import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 
 /**
- * Render the Thaumoctopus octopus mark at the size its host surface requests.
- * @param props - Host-supplied mark presentation.
- * @returns the octopus mark.
+ * Render the octopus mark at a square edge, optionally adopting the host's
+ * geometry class so slot owners keep their surrounding layout contract.
+ * @param props - the host-requested size and layout class.
+ * @returns the octopus svg element.
  */
-export function ThaumoctopusMark({ size }: SidebarBrandMarkOwnerProps) {
+function OctopusMark({ size, className }: {
+  size: number
+  className?: string | undefined
+}) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 64 64"
       width={size}
       height={size}
+      className={className}
       role="img"
       aria-label="Thaumoctopus"
     >
@@ -26,6 +32,25 @@ export function ThaumoctopusMark({ size }: SidebarBrandMarkOwnerProps) {
       <circle cx="38" cy="26" r="3" fill="#fff" />
     </svg>
   )
+}
+
+/**
+ * Sidebar slot occupant: the mark beside the brand name row.
+ * @param props - Host-supplied mark presentation.
+ * @returns the octopus mark.
+ */
+export function ThaumoctopusMark({ size }: SidebarBrandMarkOwnerProps) {
+  return <OctopusMark size={size} />
+}
+
+/**
+ * Conversation hero slot occupant: the mark leading the blank-session
+ * headline, adopting the host class that preserves the fish's slot geometry.
+ * @param props - Host-supplied mark presentation.
+ * @returns the octopus mark.
+ */
+export function ThaumoctopusHeroMark({ size, className }: HeroBrandMarkOwnerProps) {
+  return <OctopusMark size={size} className={className} />
 }
 
 /**
