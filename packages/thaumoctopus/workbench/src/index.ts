@@ -1,3 +1,9 @@
-// Thaumoctopus Workbench 插件入口。
-// 实现在 Phase 2 落地：插件目录 UI、DSH Plugin Manager 集成、安装状态流。
-export const WORKBENCH_PLUGIN_ID = 'thaumoctopus-workbench'
+/**
+ * Workbench plugin, node half. Pure UI plugin: the empty apply exists so the
+ * plugin appears in the host cordis.yml / Loader; the browser half ships via
+ * exports["./client"], discovered through the package.json dsh.client
+ * declaration.
+ */
+
+/** Host plugin body — no host-side behavior for this source plugin. */
+export function apply(): void {}

@@ -33,6 +33,7 @@
     "@deepseek-ai/dsh-client-ui-agent-preset": "workspace:*",
     "@deepseek-ai/dsh-client-ui-cordis": "workspace:*",
     "@thaumoctopus/brand": "workspace:*",
+    "@thaumoctopus/workbench": "workspace:*",
     "@deepseek-ai/dsh-cmdline": "workspace:*",
     "@deepseek-ai/dsh-command-compact": "workspace:*",
     "@deepseek-ai/dsh-command-goal": "workspace:*",

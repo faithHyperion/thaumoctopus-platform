@@ -1,0 +1,112 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.header {
+  margin: 0 0 20px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.intro {
+  margin: 4px 0 0;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.empty {
+  margin: 24px 0 0;
+  font-size: 13px;
+  opacity: 0.55;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 12px;
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsh-bg-raised, #f5f5f5);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.tile:hover {
+  background: var(--dsh-bg-hover, #ececec);
+}
+
+.tile:focus-visible {
+}
+
+.tileIcon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--dsw-radius-sm);
+  font-size: 22px;
+}
+
+.tileTitle {
+  font-size: 13px;
+}
+
+/* One open tile: the bar replaces the heading, and the body owns the rest
+   of the column below it. */
+.tileBar {
+  display: flex;
+  align-items: center;
+  margin: 0 0 16px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.back:hover {
+  background: var(--dsh-bg-hover, #ececec);
+}
+
+.back:focus-visible {
+}
+
+.backGlyph {
+  flex: none;
+  opacity: 0.8;
+}
+
+.backLabel {
+  font-weight: 600;
+}
+
+/* The body scrolls on its own so a long tile never scrolls the bar away. */
+.tileBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
