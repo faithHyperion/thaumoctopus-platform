@@ -1,7 +1,9 @@
 /** The catalog controller reconciles Control Plane data with installed bundles. */
 import { expect, it, vi } from 'vitest'
 import type { CatalogItem, ControlPlaneClient, ControlPlaneUser, InstallGrant } from '../src/client/control-plane.ts'
-import { WorkbenchCatalogController } from '../src/client/catalog-controller.ts'
+import {
+  WorkbenchCatalogController, type InstallBundleResult, type RemoteUpdateResult,
+} from '../src/client/catalog-controller.ts'
 
 const USER: ControlPlaneUser = {
   id: 1, email: 'admin@example.com', plan: 'enterprise', role: 'admin', status: 'active',
@@ -46,13 +48,13 @@ it('remembers installed versions after refresh and updates with two scoped grant
     ok: true,
     value: [{ name: ITEM.packageName, installed: true, version: installedVersion }],
   }))
-  const updateBundle = vi.fn(async () => ({
+  const updateBundle = vi.fn(async (): Promise<RemoteUpdateResult> => ({
     ok: true,
     value: { from: '1.1.0', to: '1.2.0', result: { application: 'applied' } },
   }))
   const controller = new WorkbenchCatalogController(
     client,
-    vi.fn(async () => ({ ok: true, value: { application: 'applied' } })),
+    vi.fn(async (): Promise<InstallBundleResult> => ({ ok: true, value: { application: 'applied' } })),
     listBundles,
     updateBundle,
   )
