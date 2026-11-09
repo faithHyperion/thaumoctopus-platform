@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react'
 import { IconChevronLeftOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkbenchPageComponentProps } from './contract/slots.ts'
+import { WorkbenchCatalog } from './WorkbenchCatalog.tsx'
 import css from './WorkbenchPage.module.css'
 
 /** Square edge requested of every tile glyph. */
@@ -20,7 +21,9 @@ const TILE_GLYPH_SIZE = 24
  * @param props - composed slot props (the locale, render and hooks shares).
  * @returns the page element tree.
  */
-export function WorkbenchPage({ renderSlot, useTiles, t }: WorkbenchPageComponentProps) {
+export function WorkbenchPage({
+  renderSlot, useTiles, useCatalog, login, logout, refresh, install, update, t,
+}: WorkbenchPageComponentProps) {
   const tiles = useTiles(snapshot => snapshot)
   const [openId, setOpenId] = useState<string | undefined>(undefined)
   const open = openId === undefined ? undefined : tiles.find(tile => tile.id === openId)
@@ -53,6 +56,15 @@ export function WorkbenchPage({ renderSlot, useTiles, t }: WorkbenchPageComponen
         <h1 className={css.title}>{t('panel')}</h1>
         <p className={css.intro}>{t('intro')}</p>
       </header>
+      <WorkbenchCatalog
+        useCatalog={useCatalog}
+        login={login}
+        logout={logout}
+        refresh={refresh}
+        install={install}
+        update={update}
+        t={t}
+      />
       {tiles.length === 0
         ? <p className={css.empty}>{t('empty')}</p>
         : (
@@ -62,6 +74,7 @@ export function WorkbenchPage({ renderSlot, useTiles, t }: WorkbenchPageComponen
                 key={tile.id}
                 type="button"
                 className={css.tile}
+                data-workbench-tile-button={tile.id}
                 aria-label={tile.label}
                 onClick={() => { setOpenId(tile.id) }}
               >

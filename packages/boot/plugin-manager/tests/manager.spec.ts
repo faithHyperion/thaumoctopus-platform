@@ -1194,6 +1194,39 @@ it('removes a package with the registry it was installed from, so pnpm verifies 
   expect(pnpm.mock.calls.at(-1)?.[1]).toEqual(['remove', 'mirrored'])
 })
 
+it('uses a temporary scoped npm auth config without exposing the token', async () => {
+  const { ctx, manager, dir, bundle } = await fixture()
+  const token = 'temporary-install-grant-token'
+  const chunks: PluginInstallLogChunk[] = []
+  ctx.on('plugin-manager/install-log', (chunk) => { chunks.push(chunk) })
+  let authConfigPath: string | undefined
+  let authConfig: string | undefined
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args, options) => {
+    authConfigPath = options.env?.NPM_CONFIG_USERCONFIG
+    authConfig = authConfigPath === undefined ? undefined : readFileSync(authConfigPath, 'utf8')
+    const name = String(args[1]).replace(/@[^@]+$/, '')
+    bundle(name, [{ id: name, name: './plugin.mjs', config: { service: name } }])
+    const manifest = readProfileManifest('test', dir)
+    manifest.dependencies = { ...manifest.dependencies, [name]: '1.0.0' }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+    return { exitCode: 0, output: '', truncated: false, logPath: join(dir, 'pnpm.log') }
+  })
+  onTestFinished(() => { pnpm.mockRestore() })
+
+  expect(await manager.installBundle('@scope/private@1.0.0', {
+    enabled: false,
+    registry: 'http://localhost:18080/registry/',
+    authToken: token,
+  })).toMatchObject({ application: 'applied', bundle: '@scope/private' })
+
+  expect(pnpm).toHaveBeenCalledTimes(1)
+  expect(authConfigPath).toMatch(/[\\/]auth-[0-9a-f-]+\.npmrc$/)
+  expect(authConfig).toContain('@scope:registry=http://localhost:18080/registry/')
+  expect(authConfig).toContain('//localhost:18080/registry/:_authToken=temporary-install-grant-token')
+  expect(existsSync(authConfigPath!)).toBe(false)
+  expect(chunks.every(chunk => !JSON.stringify(chunk).includes(token))).toBe(true)
+})
+
 it('streams pnpm output, reports the installation phases, and names the installed bundle', async () => {
   const { ctx, manager, dir, bundle } = await fixture()
   const chunks: PluginInstallLogChunk[] = []
@@ -2110,8 +2143,14 @@ it('refuses to list versions of a package not installed from a registry', async 
 })
 
 /** A pnpm stand-in that removes `extra` and installs the version an `add` names, unless `fails` names it. */
-function extraPnpm(dir: string, bundle: (name: string, rows: unknown[]) => void, fails: readonly string[] = []) {
-  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+function extraPnpm(
+  dir: string,
+  bundle: (name: string, rows: unknown[]) => void,
+  fails: readonly string[] = [],
+  observe?: (options: operations.PackageOperationOptions) => void,
+) {
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args, options) => {
+    observe?.(options)
     const manifest = readProfileManifest('test', dir)
     const spec = String(args[1])
     if (args[0] === 'remove') {
@@ -2146,6 +2185,68 @@ it('updates a registry bundle by removing it and installing the exact newer vers
   expect(pnpm.mock.calls.map(call => call[1])).toEqual([['remove', 'extra'], ['add', 'extra@1.2.0', '--save-exact', `--registry=${MIRROR}`]])
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.2.0')
   expect(ctx.get('managedProbe')).toBe(true)
+})
+
+it('uses temporary scoped auth configs for an update and its failed-run restore', async () => {
+  const { ctx, manager, dir, bundle } = await fixture()
+  const targetToken = 'target-install-grant-token-value'
+  const restoreToken = 'restore-install-grant-token-value'
+  const registry = 'http://localhost:18080/registry/'
+  const chunks: PluginInstallLogChunk[] = []
+  ctx.on('plugin-manager/install-log', (chunk) => { chunks.push(chunk) })
+
+  const view = vi.spyOn(operations, 'viewProfilePackage').mockImplementation(async (_dir, _spec, options) => {
+    const config = options.userConfig
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        name: 'extra',
+        version: '1.2.0',
+        engines: { dsh: '>=0.0.0-0' },
+        dsh: BUNDLE,
+        ...config === undefined ? {} : { observedConfig: readFileSync(config, 'utf8') },
+      }),
+      stderr: '',
+      timedOut: false,
+    }
+  })
+  onTestFinished(() => { view.mockRestore() })
+
+  const authConfigs: string[] = []
+  const pnpm = extraPnpm(dir, bundle, ['extra@1.2.0'], (options) => {
+    const config = options.env?.NPM_CONFIG_USERCONFIG
+    if (config !== undefined) authConfigs.push(readFileSync(config, 'utf8'))
+  })
+
+  const requestId = 'd9d0f3d1-91aa-48c7-91a0-5bbde18bf010' as PluginInstallRequestId
+  const updated = await manager.updateBundle('extra', '1.2.0', {
+    registry,
+    authToken: targetToken,
+    restoreAuthToken: restoreToken,
+    requestId,
+  })
+
+  expect(updated).toMatchObject({
+    from: '1.0.0',
+    to: '1.2.0',
+    step: 'install',
+    result: { application: 'failed' },
+    restore: { application: 'applied' },
+  })
+  expect(authConfigs).toHaveLength(2)
+  expect(authConfigs[0]).toContain(`//localhost:18080/registry/:_authToken=${targetToken}`)
+  expect(authConfigs[1]).toContain(`//localhost:18080/registry/:_authToken=${restoreToken}`)
+  expect(view).toHaveBeenCalledTimes(1)
+  expect(view.mock.calls[0]?.[2].userConfig).toMatch(/[\\/]auth-[0-9a-f-]+\.npmrc$/)
+  expect(chunks.every(chunk =>
+    !JSON.stringify(chunk).includes(targetToken) && !JSON.stringify(chunk).includes(restoreToken),
+  )).toBe(true)
+  expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.0.0')
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([
+    ['remove', 'extra'],
+    ['add', 'extra@1.2.0', '--save-exact', `--registry=${registry}`],
+    ['add', 'extra@1.0.0', '--save-exact', `--registry=${registry}`],
+  ])
 })
 
 it('installs the removed version again when the target fails to install', async () => {

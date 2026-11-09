@@ -1,7 +1,7 @@
 /** Current-profile plugin and bundle management over shared dsh plugin operations. */
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { readFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
@@ -277,6 +277,26 @@ function parsedForRegistry(spec: string): ParsedInstallSpec {
     if (!(error instanceof InvalidInstallSpecError)) throw error
     return { kind: 'registry', spec, name: spec }
   }
+}
+
+/** An opaque npm bearer token safe to place in an npmrc file. */
+const AUTH_TOKEN = /^[A-Za-z0-9_-]{20,512}$/
+
+/**
+ * Write a scope-specific npm configuration for one private-registry installation.
+ * The token is neither an argv member nor an environment value, so it cannot leak through the install log.
+ */
+async function writeTemporaryNpmAuthConfig(profileDir: string, registry: string, packageName: string, token: string): Promise<string> {
+  const normalized = normalizeRegistry(registry)
+  const parsed = new URL(normalized)
+  const directory = join(profileDir, '.plugin-manager')
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  const path = join(directory, `auth-${randomUUID()}.npmrc`)
+  const authority = `//${parsed.host}${parsed.pathname}`
+  const scope = /^(@[^/]+)\//.exec(packageName)?.[1]
+  const registryLine = scope === undefined ? `registry=${normalized}` : `${scope}:registry=${normalized}`
+  await writeFile(path, `${registryLine}\n${authority}:_authToken=${token}\n`, { mode: 0o600, flag: 'wx' })
+  return path
 }
 
 /** Only registry package names are retained before installation resolves its target. */
@@ -729,45 +749,64 @@ export class PluginManager extends TypertRemoteService {
       return refusedBefore({ code: 'invalid-spec', diagnostic: `${version} is not a version newer than the installed ${from}` })
     }
     const spec = `${name}@${version}`
-    const plan = registryPlan(this.registryFor(name, options?.registry), await this.registries())
-    const checked = await this.askRegistries(spec, VERSION_FIELDS, plan, { kind: 'registry', spec, name })
-    if (checked.status === 'refused') return refusedBefore({ code: 'operation-error', diagnostic: checked.reason })
-    const facts = versionFacts(checked.answer, name, version)
-    if (!facts.bundle) return refusedBefore({ code: 'not-bundle' })
-    let compatibility
-    try { compatibility = evaluatePluginCompatibility(facts.manifest, readProfileVersionExemptions(this.profile.dir)) }
-    catch (error) { return refusedBefore({ code: 'operation-error', diagnostic: messageOf(error) }) }
-    if (compatibility !== undefined && !compatibility.exempted) {
-      return refusedBefore({ code: 'incompatible-version', incompatible: [incompatiblePlugin(compatibility)] })
-    }
-    const { enabled } = bundle
-    // A lock timeout or disposal rejects instead of reporting; it reads as the failed step it is.
-    const settled = (stage: ChangeResult['stage'], target: string, operation: Promise<ChangeResult>): Promise<ChangeResult> =>
-      operation.catch((error: unknown) => ({ changed: false, application: 'failed', stage, target, error: managementError(error) }))
-    const installTarget = (): Promise<ChangeResult> => settled('install', spec, this.installBundle(spec, {
-      saveExact: true, registry: checked.registry, enabled, ...requestId === undefined ? {} : { requestId },
-    }))
-    if (this.ownerContext.get('hmr') === undefined) {
+    let authConfigPath: string | undefined
+    let authorizedRegistry: string | undefined
+    try {
+      if (options?.authToken !== undefined) {
+        if (options.registry == null || !AUTH_TOKEN.test(options.authToken)) return refusedBefore({ code: 'invalid-spec' })
+        authConfigPath = await writeTemporaryNpmAuthConfig(this.profile.dir, options.registry, name, options.authToken)
+        authorizedRegistry = options.registry
+      }
+      const plan = authConfigPath === undefined || authorizedRegistry === undefined
+        ? registryPlan(this.registryFor(name, options?.registry), await this.registries())
+        : [normalizeRegistry(authorizedRegistry)]
+      const checked = await this.askRegistries(
+        spec, VERSION_FIELDS, plan, { kind: 'registry', spec, name }, undefined,
+        authConfigPath,
+      )
+      if (checked.status === 'refused') return refusedBefore({ code: 'operation-error', diagnostic: checked.reason })
+      const facts = versionFacts(checked.answer, name, version)
+      if (!facts.bundle) return refusedBefore({ code: 'not-bundle' })
+      let compatibility
+      try { compatibility = evaluatePluginCompatibility(facts.manifest, readProfileVersionExemptions(this.profile.dir)) }
+      catch (error) { return refusedBefore({ code: 'operation-error', diagnostic: messageOf(error) }) }
+      if (compatibility !== undefined && !compatibility.exempted) {
+        return refusedBefore({ code: 'incompatible-version', incompatible: [incompatiblePlugin(compatibility)] })
+      }
+      const { enabled } = bundle
+      // A lock timeout or disposal rejects instead of reporting; it reads as the failed step it is.
+      const settled = (stage: ChangeResult['stage'], target: string, operation: Promise<ChangeResult>): Promise<ChangeResult> =>
+        operation.catch((error: unknown) => ({ changed: false, application: 'failed', stage, target, error: managementError(error) }))
+      const installTarget = (): Promise<ChangeResult> => settled('install', spec, this.installBundle(spec, {
+        saveExact: true, registry: checked.registry, enabled, ...requestId === undefined ? {} : { requestId },
+        ...options?.authToken === undefined ? {} : { authToken: options.authToken },
+      }))
+      if (this.ownerContext.get('hmr') === undefined) {
+        announce('installing')
+        return { from, to: version, step: 'install', result: await installTarget() }
+      }
+      // The removed version is installed again where it came from, else over the configured plan, as its removal asks.
+      const previousRegistry = this.installedFrom.get(name)
+      announce('removing')
+      const removal = await settled('remove', name, this.removeBundle(name))
+      if (removal.application === 'failed' || removal.application === 'cancelled') return { from, to: version, step: 'remove', result: removal }
       announce('installing')
-      return { from, to: version, step: 'install', result: await installTarget() }
+      const result = await installTarget()
+      if (result.application !== 'failed' && result.application !== 'cancelled') return { from, to: version, step: 'install', result }
+      announce('restoring')
+      // A target that installed but failed to start is still a dependency; it goes before the removed version returns.
+      if (result.stage === 'enable') await settled('remove', name, this.removeBundle(name))
+      // The reinstallation carries no request id, so cancelling the update cannot leave the package removed.
+      const previous = `${name}@${from}`
+      const restoreOptions: InstallBundleOptions = { saveExact: true, enabled }
+      if (previousRegistry !== undefined) restoreOptions.registry = previousRegistry
+      else if (options?.restoreAuthToken !== undefined && options.registry !== undefined) restoreOptions.registry = options.registry
+      if (options?.restoreAuthToken !== undefined) restoreOptions.authToken = options.restoreAuthToken
+      const restore = await settled('install', previous, this.installBundle(previous, restoreOptions))
+      return { from, to: version, step: 'install', result, restore }
+    } finally {
+      if (authConfigPath !== undefined) await rm(authConfigPath, { force: true })
     }
-    // The removed version is installed again where it came from, else over the configured plan, as its removal asks.
-    const previousRegistry = this.installedFrom.get(name)
-    announce('removing')
-    const removal = await settled('remove', name, this.removeBundle(name))
-    if (removal.application === 'failed' || removal.application === 'cancelled') return { from, to: version, step: 'remove', result: removal }
-    announce('installing')
-    const result = await installTarget()
-    if (result.application !== 'failed' && result.application !== 'cancelled') return { from, to: version, step: 'install', result }
-    announce('restoring')
-    // A target that installed but failed to start is still a dependency; it goes before the removed version returns.
-    if (result.stage === 'enable') await settled('remove', name, this.removeBundle(name))
-    // The reinstallation carries no request id, so cancelling the update cannot leave the package removed.
-    const previous = `${name}@${from}`
-    const restore = await settled('install', previous, this.installBundle(previous, {
-      saveExact: true, enabled, ...previousRegistry === undefined ? {} : { registry: previousRegistry },
-    }))
-    return { from, to: version, step: 'install', result, restore }
   }
 
   /**
@@ -792,11 +831,13 @@ export class PluginManager extends TypertRemoteService {
    */
   private async askRegistries(
     spec: string, fields: readonly string[], plan: readonly Registry[], parsed: ParsedInstallSpec, signal?: AbortSignal,
+    userConfig?: string,
   ): Promise<RegistryAnswer> {
     const attempts: RegistryAttempt[] = []
     for (const [index, registry] of plan.entries()) {
       const view = await viewProfilePackage(this.profile.dir, spec, {
         ...this.profile.packageManager ?? { command: this.pnpmCommand },
+        ...userConfig === undefined ? {} : { userConfig },
         fields, timeoutMs: this.inspectTimeoutMs, ...signal === undefined ? {} : { signal }, registry,
       })
       const printed = view.stdout.replace(ANSI_SEQUENCE, '').trim()
@@ -894,6 +935,8 @@ export class PluginManager extends TypertRemoteService {
       const files = await this.readRestoredFiles()
       let name: string
       let version: string | undefined
+      let authConfigPath: string | undefined
+      let authorizedRegistry: string | undefined
       try {
         result.registries = []
         const parsed = parsedForRegistry(spec)
@@ -929,7 +972,16 @@ export class PluginManager extends TypertRemoteService {
         finally { this.packageOperations.delete(transport) }
         if (stopped()) throw new InstallCancelledError()
         // The last run is the result's; the registries asked stay listed whatever the outcome.
-        const plan = registryPlan(options?.registry, await this.registries())
+        if (options?.authToken !== undefined) {
+          if (options.registry == null) throw new ManagementFailure('invalid-spec')
+          if (!AUTH_TOKEN.test(options.authToken)) throw new ManagementFailure('invalid-spec')
+          if (parsed.kind !== 'registry') throw new ManagementFailure('invalid-spec')
+          authConfigPath = await writeTemporaryNpmAuthConfig(this.profile.dir, options.registry, parsed.name, options.authToken)
+          authorizedRegistry = options.registry
+        }
+        const plan = authConfigPath === undefined || authorizedRegistry === undefined
+          ? registryPlan(options?.registry, await this.registries())
+          : [normalizeRegistry(authorizedRegistry)]
         let run: PackageResult | undefined
         let used: Registry = null
         for (const [index, registry] of plan.entries()) {
@@ -939,7 +991,12 @@ export class PluginManager extends TypertRemoteService {
           result.registries.push(registry)
           used = registry
           announce('installing', { registry, index: index + 1, total: plan.length })
-          run = await this.runPnpm(['add', installSpec, ...options?.saveExact === true ? ['--save-exact'] : [], ...registryArguments(registry)], control.abort.signal, requestId)
+          run = await this.runPnpm(
+            ['add', installSpec, ...options?.saveExact === true ? ['--save-exact'] : [], ...registryArguments(registry)],
+            control.abort.signal,
+            requestId,
+            authConfigPath === undefined ? undefined : { NPM_CONFIG_USERCONFIG: authConfigPath },
+          )
           result.packageResult = run
           if (stopped()) throw new InstallCancelledError()
           // A compatibility refusal is the package's own answer, so no other registry is asked.
@@ -991,6 +1048,8 @@ export class PluginManager extends TypertRemoteService {
         // pnpm has exited by now, so the files it rewrote go back as they were.
         await this.restoreFiles(files)
         throw error
+      } finally {
+        if (authConfigPath !== undefined) await rm(authConfigPath, { force: true })
       }
       control.phase = 'applying'
       announce('applying')
@@ -1113,7 +1172,7 @@ export class PluginManager extends TypertRemoteService {
 
   /** Run one pnpm command in the profile, streaming its output as install-log chunks. */
   private async runPnpm(
-    args: readonly string[], signal?: AbortSignal, requestId?: PluginInstallRequestId,
+    args: readonly string[], signal?: AbortSignal, requestId?: PluginInstallRequestId, environment?: Readonly<Record<string, string>>,
   ): Promise<PackageResult> {
     const jobId = randomUUID()
     const argv = ['pnpm', ...args]
@@ -1121,6 +1180,7 @@ export class PluginManager extends TypertRemoteService {
     const identity = requestId === undefined ? {} : { requestId }
     const task = runProfilePnpm({ ...this.profile, profile: this.profile.name }, args, {
       execution: 'service', ...this.profile.packageManager ?? { command: this.pnpmCommand },
+      env: { ...this.profile.packageManager?.env, ...environment },
       signal: signal === undefined ? this.abort.signal : AbortSignal.any([this.abort.signal, signal]),
       outputBytes: this.outputBytes, activateNewBundles: false, idleTimeoutMs: this.idleTimeoutMs,
       lookupTimeoutMs: this.inspectTimeoutMs,

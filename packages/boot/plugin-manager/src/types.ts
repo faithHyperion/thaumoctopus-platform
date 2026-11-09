@@ -201,6 +201,11 @@ export interface InstallBundleOptions {
   approvedBuilds?: string[]
   /** The registry asked first; absent, the configured one. The configured fallbacks follow while a registry is unreachable or stale. */
   registry?: Registry
+  /**
+   * A bearer token for `registry`, used only by this installation. It is written to a temporary
+   * scope-specific npm configuration file and never placed in argv or streamed logs.
+   */
+  authToken?: string
 }
 
 /** Where an inspection asks. */
@@ -312,6 +317,10 @@ export interface UpdateBundleOptions {
   readonly registry?: Registry
   /** Names the update's progress and the target installation's logs; `cancelInstall` stops only that installation. */
   readonly requestId?: PluginInstallRequestId
+  /** A bearer token for `registry`, used only by this update's target lookup and installation. */
+  readonly authToken?: string
+  /** A bearer token used to reinstall the installed version if the target installation fails. */
+  readonly restoreAuthToken?: string
 }
 
 /** The step of an update its Host progress names. */

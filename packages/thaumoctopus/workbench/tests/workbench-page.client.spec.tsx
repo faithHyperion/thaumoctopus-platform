@@ -2,10 +2,11 @@
 /** The workbench page renders the tile grid, opens one tile, and falls back safely. */
 import type { ComponentProps, ReactNode } from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { WorkbenchPage } from '../src/client/WorkbenchPage.tsx'
+import type { WorkbenchCatalogState } from '../src/client/catalog-controller.ts'
 import type { WorkbenchPageComponentProps } from '../src/client/contract/slots.ts'
 import { WorkbenchIcon } from '../src/client/WorkbenchIcon.tsx'
 import { en } from '../src/client/locales.ts'
@@ -34,9 +35,18 @@ function renderSlot(name: string, owner: unknown, options: unknown): ReactNode {
 
 function fixture(tiles: readonly WorkbenchTileMetadata[] = []) {
   const store = createSnapshotStore(tiles)
+  const catalog = createSnapshotStore<WorkbenchCatalogState>({
+    status: 'anonymous', user: undefined, items: [], message: undefined, installStates: {}, installedVersions: {},
+  })
   const props = {
     t: makeTranslate(en),
     useTiles: bindSnapshotSelector(store),
+    useCatalog: bindSnapshotSelector(catalog),
+    login: vi.fn(async () => {}),
+    logout: vi.fn(async () => {}),
+    refresh: vi.fn(async () => {}),
+    install: vi.fn(async () => {}),
+    update: vi.fn(async () => {}),
     renderSlot: renderSlot as WorkbenchPageComponentProps['renderSlot'],
   } as WorkbenchPageComponentProps
   return { props, store }
@@ -56,8 +66,9 @@ it('shows the empty hint when no tile is registered', () => {
 it('renders tiles in store order and opens one tile with a way back', () => {
   const b = fixture([FIRST, SECOND])
   const view = render(<WorkbenchPage {...b.props} />)
-  const buttons = view.getAllByRole('button')
+  const buttons = [...view.container.querySelectorAll('[data-workbench-tile-button]')]
   expect(buttons.map(button => button.getAttribute('aria-label'))).toEqual(['First', 'Second'])
+  expect(view.getByRole('button', { name: en.signIn })).toBeTruthy()
   expect(calls).toContainEqual({ name: 'workbench.tile', owner: { size: 24 }, options: { only: 'a' } })
   fireEvent.click(view.getByRole('button', { name: 'First' }))
   expect(view.container.querySelector('[data-workbench-tile="a"]')).toBeTruthy()

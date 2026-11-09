@@ -12,6 +12,13 @@ import { apply, PANEL_ID } from '../src/client/index.ts'
 async function fixture() {
   const ctx = new Context()
   ctx.provide('locale', new LocaleRuntime(ctx))
+  const pluginManager = {
+    installBundle: vi.fn(async () => ({ ok: true, value: { application: 'applied' } })),
+    listBundles: vi.fn(async () => ({ ok: true, value: [] })),
+    updateBundle: vi.fn(async () => ({ ok: true, value: { from: '1.0.0', to: '1.1.0', result: { application: 'applied' } } })),
+  }
+  ctx.provide('remote', { pluginManager })
+  ctx.provide('remote.pluginManager', pluginManager)
   await ctx.plugin(SlotRegistry)
   ctx.slots.register({ name: 'root', children: {
     'main': { kind: 'keyed', scope: 'root' },

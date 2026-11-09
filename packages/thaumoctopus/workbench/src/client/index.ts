@@ -20,7 +20,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // ui-layout with the panel id brand).
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+// Type-only: pulls the Remote Context merge (`ctx.remote.pluginManager`).
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkbenchPageInjected, WorkbenchTileMetadata } from './contract/slots.ts'
+import { ControlPlaneClient } from './control-plane.ts'
+import { WorkbenchCatalogController } from './catalog-controller.ts'
 import { WorkbenchIcon } from './WorkbenchIcon.tsx'
 import { WorkbenchPage } from './WorkbenchPage.tsx'
 import { en, zh, type WorkbenchKey } from './locales.ts'
@@ -44,7 +48,7 @@ export const NS = 'workbench'
 export const PANEL_ID = 'workbench' as MainPanelId
 
 /** Services required by the sidebar registration (cordis fiber inject). */
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'remote', 'remote.pluginManager']
 
 /**
  * Contribute the Workbench entry to the sidebar with the tile-grid page it
@@ -54,6 +58,14 @@ export const inject = ['slots', 'locale']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workbench: dictionaries')
   const t = ctx.locale.bind(NS)
+  const controlPlaneUrl = (process.env.DSH_CLIENT_THAUMOCTOPUS_CONTROL_PLANE_URL ?? 'http://localhost:18080').replace(/\/+$/, '')
+  const catalogController = new WorkbenchCatalogController(
+    new ControlPlaneClient(controlPlaneUrl),
+    (spec, options) => ctx.remote.pluginManager.installBundle(spec, options),
+    () => ctx.remote.pluginManager.listBundles(),
+    (name, version, options) => ctx.remote.pluginManager.updateBundle(name, version, options),
+  )
+  const catalogFace = catalogController.face()
 
   // Grid cells arrive as list registrations; the page reads them as metadata
   // (id/order/label) so it can render the button, the label, and the order
@@ -86,7 +98,14 @@ export function apply(ctx: ClientContext): void {
       'workbench.tile': { kind: 'list', scope: 'root' },
       'workbench.tile.body': { kind: 'keyed', scope: 'session-maybe' },
     },
-    inject: (): WorkbenchPageInjected => ({ hooks: { tiles } }),
+    inject: (): WorkbenchPageInjected => ({
+      hooks: { tiles, catalog: catalogFace.hooks.catalog },
+      login: catalogFace.login,
+      logout: catalogFace.logout,
+      refresh: catalogFace.refresh,
+      install: catalogFace.install,
+      update: catalogFace.update,
+    }),
   }, WorkbenchPage))
 
   // The sidebar entry: order 20 places it beneath Plugins (0) and the

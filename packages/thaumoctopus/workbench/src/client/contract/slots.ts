@@ -8,6 +8,8 @@
  * entry's content, addressed by the same id.
  */
 import type { HostObservable, InjectFace, PropsLocale, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
+import type { CatalogItem } from '../control-plane.ts'
+import type { WorkbenchCatalogState } from '../catalog-controller.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -52,7 +54,19 @@ export interface WorkbenchPageInjected {
   hooks: {
     /** Live grid entries in display order. */
     tiles: HostObservable<readonly WorkbenchTileMetadata[]>
+    /** Live Control Plane catalog state. */
+    catalog: HostObservable<WorkbenchCatalogState>
   }
+  /** Sign in to the Control Plane and load its catalog. */
+  login: (email: string, password: string) => Promise<void>
+  /** Revoke the current Control Plane session. */
+  logout: () => Promise<void>
+  /** Reload the catalog for the current session. */
+  refresh: () => Promise<void>
+  /** Request an install grant and ask the Plugin Manager to install the exact version. */
+  install: (item: CatalogItem) => Promise<void>
+  /** Request grants for the installed and target versions, then update the bundle. */
+  update: (item: CatalogItem) => Promise<void>
 }
 
 /** Complete props of the workbench page component. */

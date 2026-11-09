@@ -17290,6 +17290,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:*
+        version: link:../../api/remotes
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../client/locale
@@ -17320,6 +17323,9 @@ importers:
       react:
         specifier: ^18.2.0
         version: 18.3.1
+      semver:
+        specifier: ^7.7.2
+        version: 7.8.5
 
   packages/todo/tool-todo:
     dependencies:

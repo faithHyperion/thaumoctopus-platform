@@ -20,6 +20,7 @@ const home = process.env.DSH_HOME ?? defaultHome
 const profileName = product.defaultProfile
 const profileDir = join(home, 'profiles', profileName)
 const sourceProfile = join(repoRoot, 'profiles', profileName)
+console.log(`thaumoctopus: DSH_HOME=${home}`)
 
 if (!existsSync(profileDir)) {
   mkdirSync(profileDir, { recursive: true })
@@ -41,6 +42,10 @@ const child = spawn('pnpm', ['dsh', profileName], {
     ...process.env,
     DSH_HOME: home,
     DSH_CLIENT_TITLE: product.productName,
+    DSH_CLIENT_THAUMOCTOPUS_CONTROL_PLANE_URL:
+      process.env.DSH_CLIENT_THAUMOCTOPUS_CONTROL_PLANE_URL ?? 'http://localhost:18080',
+    DSH_CLIENT_THAUMOCTOPUS_DEFAULT_EMAIL: 'admin@example.com',
+    DSH_CLIENT_THAUMOCTOPUS_DEFAULT_PASSWORD: 'local-dev-admin-password-20261103',
   },
 })
 child.on('exit', code => {

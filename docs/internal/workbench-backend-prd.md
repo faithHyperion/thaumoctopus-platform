@@ -35,7 +35,7 @@ DSH Plugin Manager ◀──pnpm install── 用户机器
 
 ### 3.1 用户与认证
 
-- 邮箱 + 密码注册 / 登录（MVP）；
+- 邮箱 + 密码登录（MVP）；账号由管理端创建，自助注册后置；
 - 签发短期 access token（JWT，默认 15 分钟）+ refresh token（默认 30 天）；
 - `GET /v1/me`：当前用户、套餐、状态。
 
@@ -138,8 +138,8 @@ PATCH  /admin/plugins/:id/visibility
 | 语言/框架 | Go + Gin | 单二进制部署，团队指定 Go |
 | 数据库 | PostgreSQL + pgx | 并发与管理端场景优于 SQLite |
 | 数据库迁移 | golang-migrate | 版本化 SQL 迁移，服务启动前自动执行 |
-| 认证 | access token 使用 JWT；refresh token 为不可猜测随机值 | 密码哈希使用 argon2id；token 签名密钥走环境变量 |
-| 管理端 | React + Vite + Ant Design | 与 API 同仓 `apps/admin-web`，构建产物嵌入 Go 二进制 |
+| 认证 | access token 使用 JWT；refresh token 为不可猜测随机值 | 密码哈希使用 argon2id；refresh token 哈希前先加服务端密钥 |
+| 管理端 | React + Vite + Ant Design | 位于独立后端项目的 `web/admin`，构建产物嵌入 Go 二进制 |
 | 插件存储 | 本地文件系统持久卷 | MVP 不引入对象存储，`tarball_ref` 保留后续替换为 S3 的空间 |
 | 部署 | Docker 镜像 + Docker Compose | 服务 + PostgreSQL，单机即可起步 |
 
@@ -147,10 +147,10 @@ PATCH  /admin/plugins/:id/visibility
 
 ### 7.1 交付物
 
-- `apps/workbench-backend/Dockerfile`：多阶段构建，先构建管理端静态资源与 Go 二进制，再产出最小运行镜像；
-- `deploy/docker-compose.yml`：包含 `workbench-backend` 与 `postgres` 两个服务；
-- `deploy/.env.example`：列出全部必需与可选环境变量；
-- `deploy/README.md`：部署、升级、备份与恢复操作说明；
+- 独立项目 `workbench-backend/Dockerfile`：多阶段构建，先构建管理端静态资源与 Go 二进制，再产出最小运行镜像；
+- `workbench-backend/deploy/docker-compose.yml`：包含 `workbench-backend` 与 `postgres` 两个服务；
+- `workbench-backend/deploy/.env.example`：列出全部必需与可选环境变量；
+- `workbench-backend/README.md`：部署、升级、备份与恢复操作说明；
 - 镜像内不包含数据库数据、插件 tarball、JWT 密钥或管理员初始密码。
 
 管理端静态资源通过 Go `embed` 打进二进制。容器内只有一个服务进程，API、管理端页面与 registry 端点共用 `8080` 端口。
@@ -199,7 +199,7 @@ PostgreSQL 只在 Compose 网络内暴露，不映射宿主机端口。
 | `DATABASE_URL` | 是 | - | PostgreSQL 连接串 |
 | `PUBLIC_BASE_URL` | 是 | - | 对外访问地址，用于生成 registry URL，例如 `https://dsh.example.com` |
 | `JWT_ACCESS_SECRET` | 是 | - | access token 签名密钥 |
-| `JWT_REFRESH_SECRET` | 是 | - | refresh token 派生密钥 |
+| `REFRESH_TOKEN_SECRET` | 是 | - | refresh token 哈希 pepper |
 | `PLUGIN_STORAGE_DIR` | 否 | `/data/tarballs` | tarball 持久卷路径 |
 | `ACCESS_TOKEN_TTL` | 否 | `15m` | access token 有效期 |
 | `REFRESH_TOKEN_TTL` | 否 | `720h` | refresh token 有效期 |
@@ -222,13 +222,24 @@ PostgreSQL 只在 Compose 网络内暴露，不映射宿主机端口。
 - 升级验收必须验证：容器健康、迁移版本前进、旧用户可登录、旧 tarball 仍可按原 SHA-256 下载、已发布版本未被覆盖；
 - 回滚镜像前先备份数据库；只允许回滚到兼容当前 schema 的版本。
 
+### 7.7 部署验收
+
+MVP 完成时必须在干净服务器上通过以下流程：
+
+1. 准备 `deploy/.env`，填入域名、数据库连接、密钥与首个管理员配置；
+2. 执行 `docker compose up -d`，两个容器均变为 healthy；
+3. 通过反向代理访问管理端，使用 bootstrap 管理员登录并修改初始密码；
+4. 上传一个测试插件版本，并用短期 install grant 从 `https://<domain>/registry/` 完成 `pnpm install`；
+5. 执行 `docker compose restart`，确认用户、插件元数据与 tarball 均未丢失；
+6. 执行一次镜像升级演练，确认迁移版本前进且旧版本插件仍可下载。
+
 ## 8. 里程碑
 
-1. **M-B1 服务骨架**：Go 工程 + PG 迁移 + 健康检查 + Dockerfile + Compose 部署；
-2. **M-B2 认证 + 用户管理**：登录/refresh + 管理端用户页；
-3. **M-B3 插件目录**：插件/版本模型 + 管理端发布页 + `catalog` 接口；
-4. **M-B4 registry 端点 + 安装授权**：tarball 上传/分发 + install-grants + validate；
-5. **M-B5 与工作台联调**：按外层工作台计划第 5-6 步完成端到端闭环。
+1. **M-B1 服务骨架（已完成）**：Go 工程 + PG 迁移 + 健康检查 + Dockerfile + Compose 部署；验收为干净机器上 Compose 启动后 `/healthz`、`/readyz` 通过，重启后卷数据保留；
+2. **M-B2 认证 + 用户管理（已完成）**：bootstrap 管理员、argon2id 密码哈希、JWT access token、可轮换 refresh token、`/v1/me`、用户管理 API、审计事件与管理端用户页；
+3. **M-B3 插件目录（已完成）**：插件/版本模型、tarball 结构校验、不可变存储、管理端插件页与 `catalog` 接口；
+4. **M-B4 registry 端点 + 安装授权（已完成）**：tarball 上传/分发 + install-grants + validate；验收为容器化环境中可完成 `pnpm install`；
+5. **M-B5 与工作台联调（已完成）**：按外层工作台计划第 5-6 步完成端到端闭环；验收从 Docker 部署环境登录、浏览目录、安装并运行测试插件。Workbench 会同步 Plugin Manager 的已安装版本，目录中按状态显示安装 / 更新 / 已安装，并通过短期 grant 调用 Plugin Manager 的更新与失败回滚链路。
 
 ## 9. 已定与待确认
 

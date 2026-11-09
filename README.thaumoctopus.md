@@ -38,9 +38,14 @@ thaumoctopus-platform/
 node scripts/thaumoctopus/set-brand.mjs --check   # 校验 branding/product.json 产品配置
 node scripts/thaumoctopus/start-web.mjs           # 独立 DSH_HOME + 默认 profile 启动 Web UI
 pnpm run dev:thaumoctopus                         # 开发循环：重建 watcher + 品牌服务
+pnpm run build:thaumoctopus                       # 本地验证构建（登录框预填管理员账号）
 ```
 
 `start-web.mjs` 首次运行会把仓库里的 profile 复制到 `%LOCALAPPDATA%\Thaumoctopus\dsh-home\profiles\thaumoctopus`，之后用户态修改留在 dsh-home，不回写仓库。
+
+本地验证时，`pnpm run build:thaumoctopus` 会把 `admin@example.com` 和本地开发密码写进 Workbench 登录框的默认值；生产构建不要使用这个脚本。
+
+Workbench 会显示插件目录的安装、更新和已安装状态。刷新时会从 Plugin Manager 读取已安装版本；目录版本更新后，卡片会显示“更新”，更新失败时会尝试恢复原版本。
 
 ### 开发调试
 

@@ -597,6 +597,8 @@ export interface PackageViewOptions {
   args?: readonly string[]
   /** Application runtime environment, applied only to this package operation. */
   env?: Readonly<Record<string, string>>
+  /** Explicit npm configuration file carrying registry authentication for this lookup. */
+  userConfig?: string
   /** Ends the lookup early; the caller's signal, when it has one. */
   signal?: AbortSignal
   /** Bound on the lookup, in milliseconds. */
@@ -649,6 +651,7 @@ export async function viewProfilePackage(dir: string, spec: string, options: Pac
   const result = await execa(options.command ?? 'pnpm', [
     ...options.args ?? [], 'view', spec, ...options.fields, '--json',
     ...registryArguments(options.registry ?? null), '--config.fetch-retries=0',
+    ...options.userConfig === undefined ? [] : [`--userconfig=${options.userConfig}`],
   ], {
     cwd: dir, env: { ...scrubbedParentEnv(), ...options.env }, extendEnv: false, reject: false, stdin: 'ignore',
     timeout: options.timeoutMs, ...options.signal === undefined ? {} : { cancelSignal: options.signal },

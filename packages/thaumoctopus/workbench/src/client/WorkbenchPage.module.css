@@ -22,6 +22,201 @@
   opacity: 0.7;
 }
 
+.catalog {
+  margin: 0 0 24px;
+  padding: 16px;
+  border: 1px solid var(--dsh-border, #d8dee3);
+  border-radius: 6px;
+  background: var(--dsh-bg-raised, #f7f8f9);
+}
+
+.catalogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.catalogTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+}
+
+.catalogAccount {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.accountLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--dsh-text-secondary, #66707a);
+  font-size: 12px;
+}
+
+.accountLabel span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planTag {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--dsh-bg-hover, #e7eaec);
+  color: var(--dsh-text-secondary, #5d6870);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.catalogAction,
+.loginButton,
+.installButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--dsh-border, #c9d1d7);
+  border-radius: 4px;
+  background: var(--dsh-bg, #fff);
+  color: var(--dsh-text, #26313a);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.catalogAction:hover,
+.loginButton:hover,
+.installButton:hover {
+  background: var(--dsh-bg-hover, #eef1f3);
+}
+
+.catalogAction:disabled,
+.loginButton:disabled,
+.installButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.loginForm {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.loginForm label {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: var(--dsh-text-secondary, #5d6870);
+  font-size: 12px;
+}
+
+.loginForm input {
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--dsh-border, #c9d1d7);
+  border-radius: 4px;
+  background: var(--dsh-bg, #fff);
+  color: inherit;
+  font: inherit;
+}
+
+.catalogHint,
+.catalogMessage {
+  margin: 0;
+  color: var(--dsh-text-secondary, #66707a);
+  font-size: 13px;
+}
+
+.catalogMessage {
+  margin-bottom: 12px;
+  color: var(--dsh-danger, #b42318);
+}
+
+.catalogGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.catalogCard {
+  display: flex;
+  flex-direction: column;
+  min-height: 168px;
+  padding: 12px;
+  border: 1px solid var(--dsh-border, #dbe1e5);
+  border-radius: 5px;
+  background: var(--dsh-bg, #fff);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cardHeader h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.cardHeader span {
+  flex: none;
+  color: var(--dsh-text-secondary, #66707a);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}
+
+.catalogCard p {
+  margin: 0 0 12px;
+  color: var(--dsh-text-secondary, #5d6870);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cardFacts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.cardFacts div {
+  min-width: 0;
+}
+
+.cardFacts dt {
+  color: var(--dsh-text-tertiary, #7a848c);
+  font-size: 11px;
+}
+
+.cardFacts dd {
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.installButton {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
 .empty {
   margin: 24px 0 0;
   font-size: 13px;
@@ -65,6 +260,18 @@
 
 .tileTitle {
   font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .catalogHeader,
+  .catalogAccount {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .loginForm {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* One open tile: the bar replaces the heading, and the body owns the rest
