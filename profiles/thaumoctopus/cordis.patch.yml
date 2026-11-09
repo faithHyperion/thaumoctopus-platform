@@ -6,3 +6,14 @@
       name: '@thaumoctopus/brand'
     - id: thaumoctopus-workbench
       name: '@thaumoctopus/workbench'
+
+# 屏蔽 DSH 自带的 DeepSeek 引导：账号/充值欢迎窗（桌面壳）与浏览器端的
+# "添加 API Key"首启弹窗。Thaumoctopus 的账号体系接入前，这些引导对产品
+# 无意义。patch 会整体替换目标行的 config，未列出的字段回落到 schema 默认值。
+- id: ui-settings-account
+  config:
+    step: done
+    completion: skipped
+- id: ui-settings-models
+  config:
+    credentialOnboarding: false
