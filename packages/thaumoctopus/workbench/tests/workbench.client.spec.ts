@@ -16,8 +16,10 @@ async function fixture() {
     installBundle: vi.fn(async () => ({ ok: true, value: { application: 'applied' } })),
     listBundles: vi.fn(async () => ({ ok: true, value: [] })),
     updateBundle: vi.fn(async () => ({ ok: true, value: { from: '1.0.0', to: '1.1.0', result: { application: 'applied' } } })),
+    setBundleEnabled: vi.fn(async () => ({ ok: true, value: { application: 'applied' } })),
+    removeBundle: vi.fn(async () => ({ ok: true, value: { application: 'applied' } })),
   }
-  ctx.provide('remote', { pluginManager })
+  ctx.provide('remote', { pluginManager, $on: vi.fn(() => () => {}) })
   ctx.provide('remote.pluginManager', pluginManager)
   await ctx.plugin(SlotRegistry)
   ctx.slots.register({ name: 'root', children: {

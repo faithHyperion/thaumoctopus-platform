@@ -64,8 +64,13 @@ export function apply(ctx: ClientContext): void {
     (spec, options) => ctx.remote.pluginManager.installBundle(spec, options),
     () => ctx.remote.pluginManager.listBundles(),
     (name, version, options) => ctx.remote.pluginManager.updateBundle(name, version, options),
+    (name, enabled) => ctx.remote.pluginManager.setBundleEnabled(name, enabled),
+    name => ctx.remote.pluginManager.removeBundle(name),
   )
   const catalogFace = catalogController.face()
+
+  ctx.effect(() => ctx.remote.$on('plugin-manager/install-log', (chunk) => { catalogController.appendLog(chunk) }), 'ui-workbench: install logs')
+  ctx.effect(() => ctx.remote.$on('plugin-manager/changed', () => { void catalogFace.refresh() }), 'ui-workbench: installed bundles')
 
   // Grid cells arrive as list registrations; the page reads them as metadata
   // (id/order/label) so it can render the button, the label, and the order
@@ -105,6 +110,9 @@ export function apply(ctx: ClientContext): void {
       refresh: catalogFace.refresh,
       install: catalogFace.install,
       update: catalogFace.update,
+      setEnabled: catalogFace.setEnabled,
+      uninstall: catalogFace.uninstall,
+      select: catalogFace.select,
     }),
   }, WorkbenchPage))
 

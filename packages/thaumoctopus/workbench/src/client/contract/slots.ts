@@ -67,6 +67,12 @@ export interface WorkbenchPageInjected {
   install: (item: CatalogItem) => Promise<void>
   /** Request grants for the installed and target versions, then update the bundle. */
   update: (item: CatalogItem) => Promise<void>
+  /** Enable or disable an installed bundle. */
+  setEnabled: (item: CatalogItem, enabled: boolean) => Promise<void>
+  /** Remove an installed bundle. */
+  uninstall: (item: CatalogItem) => Promise<void>
+  /** Select a catalog entry and lazily load its published version history. */
+  select: (pluginId: string | undefined) => Promise<void>
 }
 
 /** Complete props of the workbench page component. */

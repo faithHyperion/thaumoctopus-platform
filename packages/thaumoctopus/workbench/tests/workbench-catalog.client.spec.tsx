@@ -33,8 +33,11 @@ function fixture(state: Partial<WorkbenchCatalogState> = {}) {
     user: undefined,
     items: [],
     message: undefined,
-    installStates: {},
-    installedVersions: {},
+    operationStates: {},
+    installedStates: {},
+    selectedPluginId: undefined,
+    versionHistories: {},
+    logs: {},
     ...state,
   })
   const actions = {
@@ -43,6 +46,9 @@ function fixture(state: Partial<WorkbenchCatalogState> = {}) {
     refresh: vi.fn(async () => {}),
     install: vi.fn(async () => {}),
     update: vi.fn(async () => {}),
+    setEnabled: vi.fn(async () => {}),
+    uninstall: vi.fn(async () => {}),
+    select: vi.fn(async () => {}),
   }
   const view = render(
     <WorkbenchCatalog
@@ -75,7 +81,7 @@ it('shows an installed version and dispatches an update when the catalog is newe
     status: 'ready',
     user: USER,
     items: [ITEM],
-    installedVersions: { '@thaumoctopus/plugin-legal': '1.1.0' },
+    installedStates: { '@thaumoctopus/plugin-legal': { version: '1.1.0', enabled: true } },
   })
   expect(view.getByText('1.1.0')).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: en.update }))
@@ -88,10 +94,63 @@ it('disables the action when the installed version is current', () => {
     status: 'ready',
     user: USER,
     items: [ITEM],
-    installedVersions: { '@thaumoctopus/plugin-legal': '1.2.0' },
+    installedStates: { '@thaumoctopus/plugin-legal': { version: '1.2.0', enabled: true } },
   })
   const button = view.getByRole('button', { name: en.installed }) as HTMLButtonElement
   expect(button.disabled).toBe(true)
   expect(actions.install).not.toHaveBeenCalled()
   expect(actions.update).not.toHaveBeenCalled()
+})
+
+it('filters by search text and category', () => {
+  const finance = { ...ITEM, pluginId: 'finance', displayName: 'Finance assistant', packageName: '@thaumoctopus/plugin-finance', categories: ['finance'] }
+  const { view } = fixture({ status: 'ready', user: USER, items: [ITEM, finance] })
+  expect(view.getByText('Legal assistant')).toBeTruthy()
+  expect(view.getByText('Finance assistant')).toBeTruthy()
+
+  fireEvent.change(view.getByPlaceholderText(en.searchPlaceholder), { target: { value: 'finance' } })
+  expect(view.queryByText('Legal assistant')).toBeNull()
+  expect(view.getByText('Finance assistant')).toBeTruthy()
+
+  fireEvent.change(view.getByPlaceholderText(en.searchPlaceholder), { target: { value: '' } })
+  fireEvent.change(view.getByLabelText(en.categoryLabel), { target: { value: 'legal' } })
+  expect(view.getByText('Legal assistant')).toBeTruthy()
+  expect(view.queryByText('Finance assistant')).toBeNull()
+})
+
+it('offers installed controls and dispatches enable, disable, and uninstall', async () => {
+  const { view, actions } = fixture({
+    status: 'ready',
+    user: USER,
+    items: [ITEM],
+    installedStates: { '@thaumoctopus/plugin-legal': { version: '1.2.0', enabled: true } },
+  })
+  fireEvent.click(view.getByRole('button', { name: en.disable }))
+  await vi.waitFor(() => { expect(actions.setEnabled).toHaveBeenCalledWith(ITEM, false) })
+
+  fireEvent.click(view.getByRole('button', { name: en.uninstall }))
+  await vi.waitFor(() => { expect(actions.uninstall).toHaveBeenCalledWith(ITEM) })
+})
+
+it('loads and shows release history and install logs', async () => {
+  const { view, store, actions } = fixture({
+    status: 'ready',
+    user: USER,
+    items: [ITEM],
+    versionHistories: {
+      legal: [{
+        version: '1.2.0', channel: 'stable', releaseNotes: 'Fixed clause comparison.', minDsh: '>=0.2.2-alpha.2', size: 316, createdAt: '2026-11-06T02:45:07Z',
+      }],
+    },
+    logs: {
+      legal: [{ jobId: 'job-1', command: 'pnpm add @thaumoctopus/plugin-legal@1.2.0', cwd: '/profile', output: 'Done', exitCode: 0 }],
+    },
+  })
+  fireEvent.click(view.getByRole('button', { name: en.details }))
+  await vi.waitFor(() => { expect(actions.select).toHaveBeenCalledWith('legal') })
+  store.set({ ...store.getSnapshot(), selectedPluginId: 'legal' })
+  await vi.waitFor(() => { expect(view.getByText(en.releaseHistory)).toBeTruthy() })
+  expect(view.getByText('Fixed clause comparison.')).toBeTruthy()
+  expect(view.getByText('pnpm add @thaumoctopus/plugin-legal@1.2.0')).toBeTruthy()
+  expect(view.getByText('Done')).toBeTruthy()
 })

@@ -33,6 +33,15 @@ export interface InstallGrant {
   readonly expiresIn: number
 }
 
+export interface PluginVersionInfo {
+  readonly version: string
+  readonly channel: string
+  readonly releaseNotes: string
+  readonly minDsh: string
+  readonly size: number
+  readonly createdAt: string
+}
+
 interface Session {
   readonly accessToken: string
   readonly refreshToken: string
@@ -94,6 +103,13 @@ export class ControlPlaneClient {
   async catalog(): Promise<readonly CatalogItem[]> {
     const answer = await this.request<{ readonly items?: readonly CatalogItem[] }>('/v1/workbench/catalog')
     return answer.items ?? []
+  }
+
+  async pluginVersions(pluginId: string): Promise<readonly PluginVersionInfo[]> {
+    const answer = await this.request<{ readonly versions?: readonly PluginVersionInfo[] }>(
+      `/v1/workbench/plugins/${encodeURIComponent(pluginId)}/versions`,
+    )
+    return answer.versions ?? []
   }
 
   async installGrant(pluginId: string, version: string): Promise<InstallGrant> {

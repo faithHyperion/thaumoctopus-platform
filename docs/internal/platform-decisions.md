@@ -55,3 +55,7 @@ registry 端点不接受用户 access token，只接受 install grant 签发的 
 Workbench 目录通过 Control Plane 登录、刷新 token 并按套餐拉取目录。安装按钮先请求 install grant，再把 grant token 作为 Plugin Manager `installBundle` 的 `authToken` 传入；Plugin Manager 生成一次性 scope 级 `.npmrc`，通过 `NPM_CONFIG_USERCONFIG` 交给 pnpm，安装结束或失败后删除。后端上传插件时校验 `dsh.bundle.patch` 指向的 YAML 必须是顶层数组，避免坏 bundle 进入 registry 后才在安装阶段失败。
 
 Workbench 刷新时会同时读取 Control Plane 目录和 Plugin Manager `listBundles()`，用包名对齐已安装版本；已安装版本低于目录最新版本时显示“更新”。更新前同时为目标版本和当前版本申请 install grant，分别传给 Plugin Manager 的 `authToken` 与 `restoreAuthToken`，目标版本安装失败时可用当前版本 grant 恢复。
+
+### D13 Workbench 插件管理扩展
+
+Workbench 通过 Plugin Manager Remote 支持已安装插件的启用、停用和卸载，并订阅 `plugin-manager/install-log` 在详情页展示最近一次安装命令与输出。目录端新增搜索、分类过滤和图标展示；Control Plane 提供当前套餐可见的用户侧版本历史接口，详情页按版本展示发布说明。

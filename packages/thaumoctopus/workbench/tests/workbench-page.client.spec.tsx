@@ -36,7 +36,8 @@ function renderSlot(name: string, owner: unknown, options: unknown): ReactNode {
 function fixture(tiles: readonly WorkbenchTileMetadata[] = []) {
   const store = createSnapshotStore(tiles)
   const catalog = createSnapshotStore<WorkbenchCatalogState>({
-    status: 'anonymous', user: undefined, items: [], message: undefined, installStates: {}, installedVersions: {},
+    status: 'anonymous', user: undefined, items: [], message: undefined,
+    operationStates: {}, installedStates: {}, selectedPluginId: undefined, versionHistories: {}, logs: {},
   })
   const props = {
     t: makeTranslate(en),
@@ -47,6 +48,9 @@ function fixture(tiles: readonly WorkbenchTileMetadata[] = []) {
     refresh: vi.fn(async () => {}),
     install: vi.fn(async () => {}),
     update: vi.fn(async () => {}),
+    setEnabled: vi.fn(async () => {}),
+    uninstall: vi.fn(async () => {}),
+    select: vi.fn(async () => {}),
     renderSlot: renderSlot as WorkbenchPageComponentProps['renderSlot'],
   } as WorkbenchPageComponentProps
   return { props, store }

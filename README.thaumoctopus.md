@@ -45,7 +45,7 @@ pnpm run build:thaumoctopus                       # 本地验证构建（登录�
 
 本地验证时，`pnpm run build:thaumoctopus` 会把 `admin@example.com` 和本地开发密码写进 Workbench 登录框的默认值；生产构建不要使用这个脚本。
 
-Workbench 会显示插件目录的安装、更新和已安装状态。刷新时会从 Plugin Manager 读取已安装版本；目录版本更新后，卡片会显示“更新”，更新失败时会尝试恢复原版本。
+Workbench 会显示插件目录的安装、更新和已安装状态。刷新时会从 Plugin Manager 读取已安装版本；目录版本更新后，卡片会显示“更新”，更新失败时会尝试恢复原版本。已安装插件支持启用、停用和卸载，目录支持搜索与分类过滤，详情页展示发布历史和最近一次安装日志。
 
 ### 开发调试
 
