@@ -180,7 +180,11 @@ export function WorkbenchCatalog({
                                 <span className={css.cardPackage}>{item.packageName}</span>
                               </div>
                             </div>
-                            <span>{installed?.version ?? item.version}</span>
+                            <span>
+                              {installed !== undefined && installed.version !== item.version
+                                ? `${installed.version} → ${item.version}`
+                                : installed?.version ?? item.version}
+                            </span>
                           </div>
 
                           <p>{item.description}</p>

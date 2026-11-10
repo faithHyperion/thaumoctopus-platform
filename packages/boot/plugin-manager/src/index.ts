@@ -748,64 +748,38 @@ export class PluginManager extends TypertRemoteService {
       return refusedBefore({ code: 'invalid-spec', diagnostic: `${version} is not a version newer than the installed ${from}` })
     }
     const spec = `${name}@${version}`
-    let authConfigPath: string | undefined
-    let authorizedRegistry: string | undefined
-    try {
-      if (options?.authToken !== undefined) {
-        if (options.registry == null || !AUTH_TOKEN.test(options.authToken)) return refusedBefore({ code: 'invalid-spec' })
-        authConfigPath = await writeTemporaryNpmAuthConfig(this.profile.dir, options.registry, name, options.authToken)
-        authorizedRegistry = options.registry
-      }
-      const plan = authConfigPath === undefined || authorizedRegistry === undefined
-        ? registryPlan(this.registryFor(name, options?.registry), await this.registries())
-        : [normalizeRegistry(authorizedRegistry)]
-      const checked = await this.askRegistries(
-        spec, VERSION_FIELDS, plan, { kind: 'registry', spec, name }, undefined,
-        authConfigPath,
-      )
-      if (checked.status === 'refused') return refusedBefore({ code: 'operation-error', diagnostic: checked.reason })
-      const facts = versionFacts(checked.answer, name, version)
-      if (!facts.bundle) return refusedBefore({ code: 'not-bundle' })
-      let compatibility
-      try { compatibility = evaluatePluginCompatibility(facts.manifest, readProfileVersionExemptions(this.profile.dir)) }
-      catch (error) { return refusedBefore({ code: 'operation-error', diagnostic: messageOf(error) }) }
-      if (compatibility !== undefined && !compatibility.exempted) {
-        return refusedBefore({ code: 'incompatible-version', incompatible: [incompatiblePlugin(compatibility)] })
-      }
-      const { enabled } = bundle
-      // A lock timeout or disposal rejects instead of reporting; it reads as the failed step it is.
-      const settled = (stage: ChangeResult['stage'], target: string, operation: Promise<ChangeResult>): Promise<ChangeResult> =>
-        operation.catch((error: unknown) => ({ changed: false, application: 'failed', stage, target, error: managementError(error) }))
-      const installTarget = (): Promise<ChangeResult> => settled('install', spec, this.installBundle(spec, {
-        saveExact: true, registry: checked.registry, enabled, ...requestId === undefined ? {} : { requestId },
-        ...options?.authToken === undefined ? {} : { authToken: options.authToken },
-      }))
-      if (this.ownerContext.get('hmr') === undefined) {
-        announce('installing')
-        return { from, to: version, step: 'install', result: await installTarget() }
-      }
-      // The removed version is installed again where it came from, else over the configured plan, as its removal asks.
-      const previousRegistry = this.installedFrom.get(name)
-      announce('removing')
-      const removal = await settled('remove', name, this.removeBundle(name))
-      if (removal.application === 'failed' || removal.application === 'cancelled') return { from, to: version, step: 'remove', result: removal }
+    const { enabled } = bundle
+    // A lock timeout or disposal rejects instead of reporting; it reads as the failed step it is.
+    const settled = (stage: ChangeResult['stage'], target: string, operation: Promise<ChangeResult>): Promise<ChangeResult> =>
+      operation.catch((error: unknown) => ({ changed: false, application: 'failed', stage, target, error: managementError(error) }))
+    const installTarget = (): Promise<ChangeResult> => settled('install', spec, this.installBundle(spec, {
+      saveExact: true, ...options?.registry === undefined ? {} : { registry: options.registry }, enabled,
+      ...requestId === undefined ? {} : { requestId },
+      ...options?.authToken === undefined ? {} : { authToken: options.authToken },
+    }))
+    if (this.ownerContext.get('hmr') === undefined) {
       announce('installing')
-      const result = await installTarget()
-      if (result.application !== 'failed' && result.application !== 'cancelled') return { from, to: version, step: 'install', result }
-      announce('restoring')
-      // A target that installed but failed to start is still a dependency; it goes before the removed version returns.
-      if (result.stage === 'enable') await settled('remove', name, this.removeBundle(name))
-      // The reinstallation carries no request id, so cancelling the update cannot leave the package removed.
-      const previous = `${name}@${from}`
-      const restoreOptions: InstallBundleOptions = { saveExact: true, enabled }
-      if (previousRegistry !== undefined) restoreOptions.registry = previousRegistry
-      else if (options?.restoreAuthToken !== undefined && options.registry !== undefined) restoreOptions.registry = options.registry
-      if (options?.restoreAuthToken !== undefined) restoreOptions.authToken = options.restoreAuthToken
-      const restore = await settled('install', previous, this.installBundle(previous, restoreOptions))
-      return { from, to: version, step: 'install', result, restore }
-    } finally {
-      if (authConfigPath !== undefined) await rm(authConfigPath, { force: true })
+      return { from, to: version, step: 'install', result: await installTarget() }
     }
+    // The removed version is installed again where it came from, else over the configured plan, as its removal asks.
+    const previousRegistry = this.installedFrom.get(name)
+    announce('removing')
+    const removal = await settled('remove', name, this.removeBundle(name))
+    if (removal.application === 'failed' || removal.application === 'cancelled') return { from, to: version, step: 'remove', result: removal }
+    announce('installing')
+    const result = await installTarget()
+    if (result.application !== 'failed' && result.application !== 'cancelled') return { from, to: version, step: 'install', result }
+    announce('restoring')
+    // A target that installed but failed to start is still a dependency; it goes before the removed version returns.
+    if (result.stage === 'enable') await settled('remove', name, this.removeBundle(name))
+    // The reinstallation carries no request id, so cancelling the update cannot leave the package removed.
+    const previous = `${name}@${from}`
+    const restoreOptions: InstallBundleOptions = { saveExact: true, enabled }
+    if (previousRegistry !== undefined) restoreOptions.registry = previousRegistry
+    else if (options?.restoreAuthToken !== undefined && options.registry !== undefined) restoreOptions.registry = options.registry
+    if (options?.restoreAuthToken !== undefined) restoreOptions.authToken = options.restoreAuthToken
+    const restore = await settled('install', previous, this.installBundle(previous, restoreOptions))
+    return { from, to: version, step: 'install', result, restore }
   }
 
   /**

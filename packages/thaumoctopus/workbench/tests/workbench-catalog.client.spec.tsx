@@ -83,7 +83,7 @@ it('shows an installed version and dispatches an update when the catalog is newe
     items: [ITEM],
     installedStates: { '@thaumoctopus/plugin-legal': { version: '1.1.0', enabled: true } },
   })
-  expect(view.getByText('1.1.0')).toBeTruthy()
+  expect(view.getByText('1.1.0 → 1.2.0')).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: en.update }))
   await vi.waitFor(() => { expect(actions.update).toHaveBeenCalledWith(ITEM) })
   expect(actions.install).not.toHaveBeenCalled()
