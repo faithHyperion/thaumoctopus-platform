@@ -15,7 +15,14 @@ const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const product = JSON.parse(readFileSync(join(repoRoot, 'branding', 'product.json'), 'utf8'))
 
 const fullBuild = process.argv.includes('--full-build')
-const env = { ...process.env, DSH_CLIENT_TITLE: product.productName }
+const env = {
+  ...process.env,
+  DSH_CLIENT_TITLE: product.productName,
+  // Keep the local sign-in defaults when the client-artifact watchers rebuild
+  // the Workbench bundle. Production builds omit these values.
+  DSH_CLIENT_THAUMOCTOPUS_DEFAULT_EMAIL: 'admin@example.com',
+  DSH_CLIENT_THAUMOCTOPUS_DEFAULT_PASSWORD: 'local-dev-admin-password-20261103',
+}
 
 const devArgs = ['--import', 'tsx/esm', 'scripts/dev-web.ts', '--no-serve']
 if (!fullBuild) devArgs.push('--skip-build')
