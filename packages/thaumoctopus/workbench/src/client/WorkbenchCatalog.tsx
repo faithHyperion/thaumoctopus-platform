@@ -175,10 +175,7 @@ export function WorkbenchCatalog({
                                   )
                                   : <IconCordisPluginOutlineRegular size={22} />}
                               </span>
-                              <div>
-                                <h3>{item.displayName}</h3>
-                                <span className={css.cardPackage}>{item.packageName}</span>
-                              </div>
+                              <h3>{item.displayName}</h3>
                             </div>
                             <span>
                               {installed !== undefined && installed.version !== item.version

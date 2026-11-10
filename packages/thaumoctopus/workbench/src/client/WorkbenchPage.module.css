@@ -211,7 +211,7 @@
 
 .cardHeader {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
@@ -221,6 +221,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -245,29 +246,18 @@
 
 .cardIdentity h3 {
   margin: 0;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
-}
-
-.cardPackage {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsh-text-tertiary, #7a848c);
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 11px;
-}
-
-.cardHeader h3 {
-  margin: 0;
   font-size: 14px;
 }
 
 .cardHeader span {
-  flex: none;
+  flex: 0 1 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--dsh-text-secondary, #66707a);
   font-family: ui-monospace, Consolas, monospace;
   font-size: 12px;
