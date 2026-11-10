@@ -4,7 +4,10 @@ import type {
   CatalogItem, ControlPlaneClient, ControlPlaneUser, InstallGrant, PluginVersionInfo,
 } from '../src/client/control-plane.ts'
 import {
-  WorkbenchCatalogController, type InstallBundleResult, type RemoteUpdateResult,
+  WorkbenchCatalogController,
+  type InstallBundleResult,
+  type RemoteChangeResult,
+  type RemoteUpdateResult,
 } from '../src/client/catalog-controller.ts'
 
 const USER: ControlPlaneUser = {
@@ -43,7 +46,7 @@ it('remembers installed versions after refresh and updates with two scoped grant
     hasSession: () => true,
     currentUser: () => USER,
     catalog: vi.fn(async () => [ITEM]),
-    pluginVersions: vi.fn(async (): readonly PluginVersionInfo[] => [{
+    pluginVersions: vi.fn(async (): Promise<readonly PluginVersionInfo[]> => [{
       version: '1.2.0', channel: 'stable', releaseNotes: 'Installed', minDsh: '>=0.2.2-alpha.2', size: 316, createdAt: '2026-11-06T02:45:07Z',
     }]),
     installGrant: vi.fn(async (_pluginId: string, version: string) => grant(version)),
@@ -57,8 +60,8 @@ it('remembers installed versions after refresh and updates with two scoped grant
     ok: true,
     value: { from: '1.1.0', to: '1.2.0', result: { application: 'applied' } },
   }))
-  const setBundleEnabled = vi.fn(async () => ({ ok: true, value: { application: 'applied' } }))
-  const removeBundle = vi.fn(async () => ({ ok: true, value: { application: 'applied' } }))
+  const setBundleEnabled = vi.fn(async (): Promise<RemoteChangeResult> => ({ ok: true, value: { application: 'applied' } }))
+  const removeBundle = vi.fn(async (): Promise<RemoteChangeResult> => ({ ok: true, value: { application: 'applied' } }))
   const controller = new WorkbenchCatalogController(
     client,
     vi.fn(async (): Promise<InstallBundleResult> => ({ ok: true, value: { application: 'applied' } })),
