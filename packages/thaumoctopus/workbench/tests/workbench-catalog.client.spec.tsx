@@ -50,10 +50,13 @@ function fixture(state: Partial<WorkbenchCatalogState> = {}) {
     uninstall: vi.fn(async () => {}),
     select: vi.fn(async () => {}),
   }
+  const openTile = vi.fn()
   const view = render(
     <WorkbenchCatalog
       t={makeTranslate(en)}
       useCatalog={bindSnapshotSelector(store)}
+      openablePluginIds={new Set<string>()}
+      openTile={openTile}
       {...actions}
     />,
   )
@@ -89,15 +92,16 @@ it('shows an installed version and dispatches an update when the catalog is newe
   expect(actions.install).not.toHaveBeenCalled()
 })
 
-it('disables the action when the installed version is current', () => {
+it('does not render a package action when the installed version is current', () => {
   const { view, actions } = fixture({
     status: 'ready',
     user: USER,
     items: [ITEM],
     installedStates: { '@thaumoctopus/plugin-legal': { version: '1.2.0', enabled: true } },
   })
-  const button = view.getByRole('button', { name: en.installed }) as HTMLButtonElement
-  expect(button.disabled).toBe(true)
+  expect(view.queryByRole('button', { name: en.install })).toBeNull()
+  expect(view.queryByRole('button', { name: en.update })).toBeNull()
+  expect(view.queryByRole('button', { name: en.installed })).toBeNull()
   expect(actions.install).not.toHaveBeenCalled()
   expect(actions.update).not.toHaveBeenCalled()
 })

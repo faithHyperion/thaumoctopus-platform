@@ -8,6 +8,7 @@ import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-tes
 import { WorkbenchPage } from '../src/client/WorkbenchPage.tsx'
 import type { WorkbenchCatalogState } from '../src/client/catalog-controller.ts'
 import type { WorkbenchPageComponentProps } from '../src/client/contract/slots.ts'
+import type { CatalogItem, ControlPlaneUser } from '../src/client/control-plane.ts'
 import { WorkbenchIcon } from '../src/client/WorkbenchIcon.tsx'
 import { en } from '../src/client/locales.ts'
 import type { WorkbenchTileBodyOwnerProps, WorkbenchTileMetadata } from '../src/client/contract/slots.ts'
@@ -53,11 +54,31 @@ function fixture(tiles: readonly WorkbenchTileMetadata[] = []) {
     select: vi.fn(async () => {}),
     renderSlot: renderSlot as WorkbenchPageComponentProps['renderSlot'],
   } as WorkbenchPageComponentProps
-  return { props, store }
+  return { props, store, catalog }
 }
 
 const FIRST: WorkbenchTileMetadata = { id: 'a', order: 1, label: 'First' }
 const SECOND: WorkbenchTileMetadata = { id: 'b', order: 2, label: 'Second' }
+const LEGAL: WorkbenchTileMetadata = { id: 'legal', order: 3, label: 'Legal assistant' }
+
+const USER: ControlPlaneUser = {
+  id: 1, email: 'admin@example.com', plan: 'enterprise', role: 'admin', status: 'active',
+}
+
+const ITEM: CatalogItem = {
+  pluginId: 'legal',
+  packageName: '@thaumoctopus/plugin-legal',
+  displayName: 'Legal assistant',
+  description: 'Contract review.',
+  icon: '',
+  version: '1.2.0',
+  channel: 'stable',
+  minDsh: '>=0.2.2-alpha.2 <0.3.0',
+  categories: ['legal'],
+  plans: ['enterprise'],
+  state: 'available',
+  releaseNotes: '',
+}
 
 it('shows the empty hint when no tile is registered', () => {
   const b = fixture()
@@ -92,6 +113,42 @@ it('drops back to the grid when the open tile unloads', () => {
   act(() => { b.store.set([SECOND]) })
   expect(view.queryByText('a')).toBeNull()
   expect(view.getByRole('button', { name: 'Second' })).toBeTruthy()
+})
+
+it('opens an installed catalog plugin from its card while keeping update separate', () => {
+  const b = fixture([LEGAL])
+  b.catalog.set({
+    ...b.catalog.getSnapshot(),
+    status: 'ready',
+    user: USER,
+    items: [ITEM],
+    installedStates: { [ITEM.packageName]: { version: '1.1.0', enabled: true } },
+  })
+  const view = render(<WorkbenchPage {...b.props} />)
+
+  expect(view.getByRole('button', { name: en.open })).toBeTruthy()
+  expect(view.getByRole('button', { name: en.update })).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: en.open }))
+  expect(view.container.querySelector('[data-workbench-tile="legal"]')).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: LEGAL.label }))
+  expect(view.container.querySelector('[data-workbench-tile="legal"]')).toBeNull()
+
+  fireEvent.click(view.getByRole('button', { name: en.update }))
+  expect(b.props.update).toHaveBeenCalledWith(ITEM)
+})
+
+it('does not offer opening a plugin without a registered tile', () => {
+  const b = fixture()
+  b.catalog.set({
+    ...b.catalog.getSnapshot(),
+    status: 'ready',
+    user: USER,
+    items: [ITEM],
+    installedStates: { [ITEM.packageName]: { version: '1.1.0', enabled: true } },
+  })
+  const view = render(<WorkbenchPage {...b.props} />)
+  expect(view.queryByRole('button', { name: en.open })).toBeNull()
+  expect(view.getByRole('button', { name: en.update })).toBeTruthy()
 })
 
 it('renders the sidebar glyph', () => {

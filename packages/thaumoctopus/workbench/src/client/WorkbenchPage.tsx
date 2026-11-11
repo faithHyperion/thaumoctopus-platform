@@ -7,7 +7,7 @@
  * Opening a tile swaps the grid for that tile's `workbench.tile.body`, and
  * the bar above it carries the tile label as the way back.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { IconChevronLeftOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkbenchPageComponentProps } from './contract/slots.ts'
 import { WorkbenchCatalog } from './WorkbenchCatalog.tsx'
@@ -25,6 +25,7 @@ export function WorkbenchPage({
   renderSlot, useTiles, useCatalog, login, logout, refresh, install, update, setEnabled, uninstall, select, t,
 }: WorkbenchPageComponentProps) {
   const tiles = useTiles(snapshot => snapshot)
+  const openablePluginIds = useMemo(() => new Set(tiles.map(tile => tile.id)), [tiles])
   const [openId, setOpenId] = useState<string | undefined>(undefined)
   const open = openId === undefined ? undefined : tiles.find(tile => tile.id === openId)
   const close = (): void => { setOpenId(undefined) }
@@ -58,6 +59,8 @@ export function WorkbenchPage({
       </header>
       <WorkbenchCatalog
         useCatalog={useCatalog}
+        openablePluginIds={openablePluginIds}
+        openTile={setOpenId}
         login={login}
         logout={logout}
         refresh={refresh}

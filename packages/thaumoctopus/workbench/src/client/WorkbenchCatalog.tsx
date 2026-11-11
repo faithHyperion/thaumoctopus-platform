@@ -5,6 +5,7 @@ import {
   IconCordisPluginOutlineRegular,
   IconCodeOutlineRegular,
   IconDownloadOutlineRegular,
+  IconFolderOpenOutlineRegular,
   IconPauseOutlineRegular,
   IconPlayOutlineRegular,
   IconRefreshOutlineRegular,
@@ -22,6 +23,8 @@ import css from './WorkbenchPage.module.css'
 
 interface WorkbenchCatalogProps extends PropsLocale<'workbench'> {
   readonly useCatalog: <S>(selector: (state: WorkbenchCatalogState) => S) => S
+  readonly openablePluginIds: ReadonlySet<string>
+  readonly openTile: (pluginId: string) => void
   readonly login: (email: string, password: string) => Promise<void>
   readonly logout: () => Promise<void>
   readonly refresh: () => Promise<void>
@@ -36,7 +39,7 @@ const DEFAULT_EMAIL = process.env.DSH_CLIENT_THAUMOCTOPUS_DEFAULT_EMAIL ?? ''
 const DEFAULT_PASSWORD = process.env.DSH_CLIENT_THAUMOCTOPUS_DEFAULT_PASSWORD ?? ''
 
 export function WorkbenchCatalog({
-  useCatalog, login, logout, refresh, install, update, setEnabled, uninstall, select, t,
+  useCatalog, openablePluginIds, openTile, login, logout, refresh, install, update, setEnabled, uninstall, select, t,
 }: WorkbenchCatalogProps) {
   const state = useCatalog(snapshot => snapshot)
   const [email, setEmail] = useState(DEFAULT_EMAIL)
@@ -158,6 +161,7 @@ export function WorkbenchCatalog({
                       const action = packageAction(item.version, installed?.version)
                       const operation = state.operationStates[item.pluginId]
                       const running = operation?.phase === 'running'
+                      const openable = installed?.enabled === true && openablePluginIds.has(item.pluginId)
                       return (
                         <article className={css.catalogCard} key={item.pluginId}>
                           <div className={css.cardHeader}>
@@ -203,15 +207,28 @@ export function WorkbenchCatalog({
                           )}
 
                           <div className={css.cardActions}>
-                            <button
-                              type="button"
-                              className={css.installButton}
-                              disabled={running || action === 'installed'}
-                              onClick={() => { void (action === 'update' ? update(item) : install(item)) }}
-                            >
-                              <IconDownloadOutlineRegular size={14} />
-                              <span>{operationLabel(action, operation, t)}</span>
-                            </button>
+                            {openable && (
+                              <button
+                                type="button"
+                                className={css.installButton}
+                                disabled={running}
+                                onClick={() => { openTile(item.pluginId) }}
+                              >
+                                <IconFolderOpenOutlineRegular size={14} />
+                                <span>{t('open')}</span>
+                              </button>
+                            )}
+                            {(action === 'install' || action === 'update') && (
+                              <button
+                                type="button"
+                                className={css.installButton}
+                                disabled={running}
+                                onClick={() => { void (action === 'update' ? update(item) : install(item)) }}
+                              >
+                                <IconDownloadOutlineRegular size={14} />
+                                <span>{operationLabel(action, operation, t)}</span>
+                              </button>
+                            )}
                             {installed !== undefined && (
                               <>
                                 <button
