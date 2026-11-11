@@ -1220,6 +1220,7 @@ it('uses a temporary scoped npm auth config without exposing the token', async (
   })).toMatchObject({ application: 'applied', bundle: '@scope/private' })
 
   expect(pnpm).toHaveBeenCalledTimes(1)
+  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', '@scope/private@1.0.0'])
   expect(authConfigPath).toMatch(/[\\/]auth-[0-9a-f-]+\.npmrc$/)
   expect(authConfig).toContain('@scope:registry=http://localhost:18080/registry/')
   expect(authConfig).toContain('//localhost:18080/registry/:_authToken=temporary-install-grant-token')
@@ -2194,7 +2195,21 @@ it('uses temporary scoped auth configs for update installs and its failed-run re
   const chunks: PluginInstallLogChunk[] = []
   ctx.on('plugin-manager/install-log', (chunk) => { chunks.push(chunk) })
 
-  const view = vi.spyOn(operations, 'viewProfilePackage')
+  const view = vi.spyOn(operations, 'viewProfilePackage').mockImplementation(async (_dir, _spec, options) => {
+    const config = options.env?.NPM_CONFIG_USERCONFIG
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        name: 'extra',
+        version: '1.2.0',
+        engines: { dsh: '>=0.0.0-0' },
+        dsh: BUNDLE,
+        ...config === undefined ? {} : { observedConfig: readFileSync(config, 'utf8') },
+      }),
+      stderr: '',
+      timedOut: false,
+    }
+  })
   onTestFinished(() => { view.mockRestore() })
 
   const authConfigs: string[] = []
@@ -2221,15 +2236,16 @@ it('uses temporary scoped auth configs for update installs and its failed-run re
   expect(authConfigs).toHaveLength(2)
   expect(authConfigs[0]).toContain(`//localhost:18080/registry/:_authToken=${targetToken}`)
   expect(authConfigs[1]).toContain(`//localhost:18080/registry/:_authToken=${restoreToken}`)
-  expect(view).not.toHaveBeenCalled()
+  expect(view).toHaveBeenCalledTimes(1)
+  expect(view.mock.calls[0]?.[2].env?.NPM_CONFIG_USERCONFIG).toMatch(/[\\/]auth-[0-9a-f-]+\.npmrc$/)
   expect(chunks.every(chunk =>
     !JSON.stringify(chunk).includes(targetToken) && !JSON.stringify(chunk).includes(restoreToken),
   )).toBe(true)
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.0.0')
   expect(pnpm.mock.calls.map(call => call[1])).toEqual([
     ['remove', 'extra'],
-    ['add', 'extra@1.2.0', '--save-exact', `--registry=${registry}`],
-    ['add', 'extra@1.0.0', '--save-exact', `--registry=${registry}`],
+    ['add', 'extra@1.2.0', '--save-exact'],
+    ['add', 'extra@1.0.0', '--save-exact'],
   ])
 })
 
