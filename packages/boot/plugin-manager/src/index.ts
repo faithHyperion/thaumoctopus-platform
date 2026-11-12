@@ -11,6 +11,7 @@ import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import z from '@deepseek-ai/schemastery'
 import semver from 'semver'
 import { TypertRemoteService, Remote, RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import { parse } from 'yaml'
 import { detailImageResponse, NPM_FILE_SOURCES } from '@deepseek-ai/dsh-plugin-detail'
 import type { NpmFileSource } from '@deepseek-ai/dsh-plugin-detail/types'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -926,6 +927,7 @@ export class PluginManager extends TypertRemoteService {
     const result = this.change(async (result) => {
       if (spec.trim() === '' || spec.startsWith('-')) throw new ManagementFailure('invalid-spec')
       if (stopped()) throw new InstallCancelledError()
+      await this.reconcileManifestWithLockfile()
       const before = readProfileManifest('dsh', this.profile.dir).dependencies ?? {}
       // With HMR, an installed package is removed before another version is installed, so its plugins stop first.
       const known = specPackageName(spec, before, this.profile.dir)
@@ -1038,6 +1040,14 @@ export class PluginManager extends TypertRemoteService {
           }
           throw new Error(run.output)
         }
+        if (parsed.kind === 'registry') {
+          let expected: ProfileManifest | undefined
+          try { expected = bundleManifest(parsed.name, this.profile.dir, this.profile.installAnchor) }
+          catch { expected = undefined }
+          if (expected?.version !== undefined) {
+            await this.syncInstalledDependency(parsed.name, expected.version, parsed, options?.saveExact === true)
+          }
+        }
         const after = readProfileManifest('dsh', this.profile.dir).dependencies ?? {}
         const installed = Object.keys(after).filter(name => before[name] !== after[name])
         // Without HMR a repeated installation can leave the saved dependency as it was.
@@ -1055,6 +1065,7 @@ export class PluginManager extends TypertRemoteService {
         if (compatibility !== undefined && !compatibility.exempted) throw new ManagementFailure('incompatible-version', [incompatiblePlugin(compatibility)])
         for (const file of bundlePatchPaths(dir, manifest.dsh.bundle)) loadOverlayPatches('dsh', file)
         version = manifest.version
+        if (version !== undefined) await this.syncInstalledDependency(name, version, parsed, options?.saveExact === true)
         this.installedFrom.set(name, used)
       } catch (error) {
         // pnpm has exited by now, so the files it rewrote go back as they were.
@@ -1117,6 +1128,7 @@ export class PluginManager extends TypertRemoteService {
   @Remote
   removeBundle(name: string): Promise<ChangeResult> {
     return this.change(async (result) => {
+      await this.reconcileManifestWithLockfile()
       const installed = await this.configure(async () => {
         const bundle = (await this.listBundles()).find(item => item.name === name)
         if (bundle === undefined || !bundle.removable) throw new ManagementFailure('not-removable')
@@ -1151,6 +1163,7 @@ export class PluginManager extends TypertRemoteService {
       if (result.packageResult.exitCode !== 0 || result.packageResult.timedOut === true) {
         throw new Error(result.packageResult.output)
       }
+      await this.forgetInstalledDependency(name)
       this.installedFrom.delete(name)
       Object.assign(result, await this.configure(() => this.publishAndReload()))
     }, { stage: 'remove', target: name }, 'remove')
@@ -1266,6 +1279,84 @@ export class PluginManager extends TypertRemoteService {
     manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
     await saveManifest(this.profile.dir, manifest)
     if (enabled) this.protectsManager(name)
+  }
+
+  /**
+   * Keep the profile manifest aligned with the package pnpm installed. Pnpm
+   * normally writes this itself; doing it after reading the installed manifest
+   * also keeps a package-manager environment that suppresses saves from
+   * leaving the manifest and lockfile on different versions.
+   * @param name Installed dependency name.
+   * @param version Version read from the installed package.
+   * @param parsed Install spec, whose registry range is preserved when valid.
+   * @param saveExact Whether the caller asked for an exact dependency.
+   */
+  private async syncInstalledDependency(
+    name: string,
+    version: string,
+    parsed: ParsedInstallSpec,
+    saveExact: boolean,
+  ): Promise<void> {
+    if (parsed.kind !== 'registry') return
+    const manifest = readProfileManifest('dsh', this.profile.dir)
+    const current = manifest.dependencies?.[name]
+    const lockfilePath = join(this.profile.dir, 'pnpm-lock.yaml')
+    const lockfile = existsSync(lockfilePath)
+      ? parse(readFileSync(lockfilePath, 'utf8')) as {
+        importers?: { '.': { dependencies?: Record<string, { specifier?: string }> } }
+      }
+      : undefined
+    const lockfileSpecifier = lockfile?.importers?.['.']?.dependencies?.[name]?.specifier
+    if (current !== undefined && (lockfileSpecifier === undefined || lockfileSpecifier === current)) return
+    const requestedRange = parsed.range !== undefined && semver.validRange(parsed.range) !== null ? parsed.range : undefined
+    const dependency = lockfileSpecifier ?? (saveExact
+      ? version
+      : requestedRange ?? (semver.valid(version) === null ? version : `^${version}`))
+    if (current === dependency) return
+    manifest.dependencies = { ...manifest.dependencies, [name]: dependency }
+    await saveManifest(this.profile.dir, manifest)
+  }
+
+  /** Remove a successful pnpm removal from the profile manifest as well. */
+  private async forgetInstalledDependency(name: string): Promise<void> {
+    const manifest = readProfileManifest('dsh', this.profile.dir)
+    if (!Object.hasOwn(manifest.dependencies ?? {}, name)) return
+    const dependencies = Object.fromEntries(
+      Object.entries(manifest.dependencies ?? {}).filter(([dependency]) => dependency !== name),
+    )
+    manifest.dependencies = dependencies
+    await saveManifest(this.profile.dir, manifest)
+  }
+
+  /**
+   * Align manifest dependency specifiers with the lockfile before a package
+   * operation. A prior run that updated the lockfile but not the manifest makes
+   * the next pnpm operation re-resolve unrelated private packages from the
+   * public registry; the lockfile is the package manager's resolved truth.
+   */
+  private async reconcileManifestWithLockfile(): Promise<void> {
+    const manifest = readProfileManifest('dsh', this.profile.dir)
+    const lockfilePath = join(this.profile.dir, 'pnpm-lock.yaml')
+    if (!existsSync(lockfilePath)) return
+    let lockfile: { importers?: { '.': { dependencies?: Record<string, { specifier?: unknown }> } } }
+    try {
+      lockfile = parse(readFileSync(lockfilePath, 'utf8')) as typeof lockfile
+    } catch {
+      return
+    }
+    const resolved = lockfile.importers?.['.']?.dependencies
+    if (resolved === undefined) return
+    const dependencies = { ...manifest.dependencies }
+    let changed = false
+    for (const [name, entry] of Object.entries(resolved)) {
+      const specifier = entry?.specifier
+      if (typeof specifier !== 'string' || dependencies[name] === specifier) continue
+      dependencies[name] = specifier
+      changed = true
+    }
+    if (!changed) return
+    manifest.dependencies = dependencies
+    await saveManifest(this.profile.dir, manifest)
   }
 
   private bundleRows(name: string): EntryOptions[] {

@@ -1206,9 +1206,6 @@ it('uses a temporary scoped npm auth config without exposing the token', async (
     authConfig = authConfigPath === undefined ? undefined : readFileSync(authConfigPath, 'utf8')
     const name = String(args[1]).replace(/@[^@]+$/, '')
     bundle(name, [{ id: name, name: './plugin.mjs', config: { service: name } }])
-    const manifest = readProfileManifest('test', dir)
-    manifest.dependencies = { ...manifest.dependencies, [name]: '1.0.0' }
-    writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
     return { exitCode: 0, output: '', truncated: false, logPath: join(dir, 'pnpm.log') }
   })
   onTestFinished(() => { pnpm.mockRestore() })
@@ -1224,8 +1221,49 @@ it('uses a temporary scoped npm auth config without exposing the token', async (
   expect(authConfigPath).toMatch(/[\\/]auth-[0-9a-f-]+\.npmrc$/)
   expect(authConfig).toContain('@scope:registry=http://localhost:18080/registry/')
   expect(authConfig).toContain('//localhost:18080/registry/:_authToken=temporary-install-grant-token')
+  expect(readProfileManifest('test', dir).dependencies?.['@scope/private']).toBe('1.0.0')
   expect(existsSync(authConfigPath!)).toBe(false)
   expect(chunks.every(chunk => !JSON.stringify(chunk).includes(token))).toBe(true)
+})
+
+it('removes a dependency from the manifest even when pnpm does not save it', async () => {
+  const { manager, dir } = await fixture()
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    if (args[0] === 'remove') rmSync(join(dir, 'node_modules', String(args[1])), { recursive: true, force: true })
+    return { exitCode: 0, output: '', truncated: false, logPath: join(dir, 'pnpm.log') }
+  })
+  onTestFinished(() => { pnpm.mockRestore() })
+
+  expect(await manager.removeBundle('extra')).toMatchObject({ application: 'applied' })
+  expect(readProfileManifest('test', dir).dependencies?.extra).toBeUndefined()
+  expect(existsSync(join(dir, 'node_modules', 'extra', 'package.json'))).toBe(false)
+})
+
+it('reconciles a stale manifest with the lockfile before removing another package', async () => {
+  const { manager, dir } = await fixture()
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), [
+    "lockfileVersion: '9.0'",
+    'importers:',
+    '  .:',
+    '    dependencies:',
+    '      extra:',
+    '        specifier: 2.0.0',
+    '        version: 2.0.0',
+    '',
+  ].join('\n'))
+  let observed: string | undefined
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    if (args[0] === 'remove') {
+      observed = readProfileManifest('test', dir).dependencies?.extra
+      rmSync(join(dir, 'node_modules', String(args[1])), { recursive: true, force: true })
+    }
+    return { exitCode: 0, output: '', truncated: false, logPath: join(dir, 'pnpm.log') }
+  })
+  onTestFinished(() => { pnpm.mockRestore() })
+
+  expect(await manager.removeBundle('extra')).toMatchObject({ application: 'applied' })
+  expect(observed).toBe('2.0.0')
+  expect(readProfileManifest('test', dir).dependencies?.extra).toBeUndefined()
 })
 
 it('streams pnpm output, reports the installation phases, and names the installed bundle', async () => {
@@ -1261,7 +1299,7 @@ it('streams pnpm output, reports the installation phases, and names the installe
   expect(changes).toEqual([{ reason: 'install' }])
   // A run without a request id streams too, unidentified.
   await manager.removeBundle('streamed')
-  expect(chunks.at(-1)).toMatchObject({ argv: ['pnpm', 'remove', 'streamed'], stream: 'stdout', exitCode: 0 })
+  expect(chunks.at(-1)).toMatchObject({ argv: ['pnpm', 'remove', 'streamed', '--trust-lockfile'], stream: 'stdout', exitCode: 0 })
   expect(chunks.at(-1)).not.toHaveProperty('requestId')
   expect(changes).toEqual([{ reason: 'install' }, { reason: 'remove' }])
 })
