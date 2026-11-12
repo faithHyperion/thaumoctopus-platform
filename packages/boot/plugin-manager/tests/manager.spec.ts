@@ -214,7 +214,7 @@ it('installs the spec the Git transport probe chooses with the profile Git envir
   onTestFinished(() => { transport.mockRestore(); pnpm.mockRestore() })
   expect((await manager.installBundle(spec)).application).toBe('failed')
   expect(transport).toHaveBeenCalledWith(expect.objectContaining({ kind: 'git', spec }), dir, expect.objectContaining({ timeoutMs: 7000, env }))
-  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', 'git+ssh://git@git.example/team/sub/plugin.git#main'])
+  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', 'git+ssh://git@git.example/team/sub/plugin.git#main', '--save-prod'])
 })
 
 it('attributes a failure to the host of the SSH spec the probe chose, which carries no HTTPS port', async () => {
@@ -1220,7 +1220,7 @@ it('uses a temporary scoped npm auth config without exposing the token', async (
   })).toMatchObject({ application: 'applied', bundle: '@scope/private' })
 
   expect(pnpm).toHaveBeenCalledTimes(1)
-  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', '@scope/private@1.0.0'])
+  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', '@scope/private@1.0.0', '--save-prod'])
   expect(authConfigPath).toMatch(/[\\/]auth-[0-9a-f-]+\.npmrc$/)
   expect(authConfig).toContain('@scope:registry=http://localhost:18080/registry/')
   expect(authConfig).toContain('//localhost:18080/registry/:_authToken=temporary-install-grant-token')
@@ -1249,13 +1249,13 @@ it('streams pnpm output, reports the installation phases, and names the installe
   onTestFinished(() => { install.mockRestore() })
   const requestId = 'f2340b6d-40bb-46b7-8b94-217bdf5010bd' as PluginInstallRequestId
   expect(await manager.installBundle('streamed', { enabled: false, requestId })).toMatchObject({ application: 'applied', changed: true, bundle: 'streamed' })
-  expect(install).toHaveBeenCalledWith(expect.objectContaining({ profile: 'test' }), ['add', 'streamed'],
+  expect(install).toHaveBeenCalledWith(expect.objectContaining({ profile: 'test' }), ['add', 'streamed', '--save-prod'],
     expect.objectContaining({ command: 'pnpm', execution: 'service' }))
   const jobId = chunks[0]?.jobId
   expect(chunks).toEqual([
-    { requestId, jobId, argv: ['pnpm', 'add', 'streamed'], cwd: dir, stream: 'stdout', text: 'Progress: resolved 1\n' },
-    { requestId, jobId, argv: ['pnpm', 'add', 'streamed'], cwd: dir, stream: 'stderr', text: 'warning\n' },
-    { requestId, jobId, argv: ['pnpm', 'add', 'streamed'], cwd: dir, stream: 'stdout', text: '', exitCode: 0 },
+    { requestId, jobId, argv: ['pnpm', 'add', 'streamed', '--save-prod'], cwd: dir, stream: 'stdout', text: 'Progress: resolved 1\n' },
+    { requestId, jobId, argv: ['pnpm', 'add', 'streamed', '--save-prod'], cwd: dir, stream: 'stderr', text: 'warning\n' },
+    { requestId, jobId, argv: ['pnpm', 'add', 'streamed', '--save-prod'], cwd: dir, stream: 'stdout', text: '', exitCode: 0 },
   ])
   expect(phases).toEqual([{ requestId, phase: 'installing', attempt: { registry: null, index: 1, total: 2 } }, { requestId, phase: 'applying' }])
   expect(changes).toEqual([{ reason: 'install' }])
@@ -1651,7 +1651,7 @@ it('installs from the next registry after one is unreachable, restoring the file
   const result = await manager.installBundle('fallen', { enabled: false, requestId })
   expect(result).toMatchObject({ application: 'applied', bundle: 'fallen', registries: [null, MIRROR], packageResult: { exitCode: 0 } })
   expect(result.failedAt).toBeUndefined()
-  expect(install.mock.calls.map(call => call[1])).toEqual([['add', 'fallen'], ['add', 'fallen', `--registry=${MIRROR}`]])
+  expect(install.mock.calls.map(call => call[1])).toEqual([['add', 'fallen', '--save-prod'], ['add', 'fallen', '--save-prod', `--registry=${MIRROR}`]])
   expect(phases).toEqual([
     { requestId, phase: 'installing', attempt: { registry: null, index: 1, total: 2 } },
     { requestId, phase: 'installing', attempt: { registry: MIRROR, index: 2, total: 2 } },
@@ -1659,7 +1659,7 @@ it('installs from the next registry after one is unreachable, restoring the file
   ])
   // Each attempt streams as its own run, the command line naming the registry it asked.
   expect(new Set(chunks.map(chunk => chunk.jobId)).size).toBe(2)
-  expect(chunks.at(-1)).toMatchObject({ requestId, argv: ['pnpm', 'add', 'fallen', `--registry=${MIRROR}`], exitCode: 0 })
+  expect(chunks.at(-1)).toMatchObject({ requestId, argv: ['pnpm', 'add', 'fallen', '--save-prod', `--registry=${MIRROR}`], exitCode: 0 })
 })
 
 it('does not ask the next registry after the manager terminated a silent run', async () => {
@@ -1719,7 +1719,7 @@ it('stops at a failure no registry changes, at a host the spec itself is fetched
     application: 'failed', registries: ['https://npm.corp.example/'], failedAt: 'registry', packageResult: { kind: 'network' },
   })
   expect(install).toHaveBeenCalledTimes(3)
-  expect(install).toHaveBeenLastCalledWith(expect.anything(), ['add', 'dsh-x', '--registry=https://npm.corp.example/'], expect.anything())
+  expect(install).toHaveBeenLastCalledWith(expect.anything(), ['add', 'dsh-x', '--save-prod', '--registry=https://npm.corp.example/'], expect.anything())
   // Every configured registry unreachable: the failure is the last attempt's, and all of them are named.
   install.mockResolvedValue(failing('ERR_PNPM_META_FETCH_FAIL  GET https://registry/dsh-x: ETIMEDOUT'))
   expect(await manager.installBundle('dsh-x')).toMatchObject({ application: 'failed', registries: [null, MIRROR], failedAt: 'registry', packageResult: { kind: 'network' } })
@@ -2182,7 +2182,7 @@ it('updates a registry bundle by removing it and installing the exact newer vers
   expect(updated).toMatchObject({ from: '1.0.0', to: '1.2.0', step: 'install', result: { application: 'applied', version: '1.2.0', enabled: true } })
   expect(updated.restore).toBeUndefined()
   expect(steps).toEqual(['checking', 'removing', 'installing'])
-  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['remove', 'extra'], ['add', 'extra@1.2.0', '--save-exact', `--registry=${MIRROR}`]])
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['remove', 'extra'], ['add', 'extra@1.2.0', '--save-prod', '--save-exact', `--registry=${MIRROR}`]])
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.2.0')
   expect(ctx.get('managedProbe')).toBe(true)
 })
@@ -2244,8 +2244,8 @@ it('uses temporary scoped auth configs for update installs and its failed-run re
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.0.0')
   expect(pnpm.mock.calls.map(call => call[1])).toEqual([
     ['remove', 'extra'],
-    ['add', 'extra@1.2.0', '--save-exact'],
-    ['add', 'extra@1.0.0', '--save-exact'],
+    ['add', 'extra@1.2.0', '--save-prod', '--save-exact'],
+    ['add', 'extra@1.0.0', '--save-prod', '--save-exact'],
   ])
 })
 
@@ -2264,8 +2264,8 @@ it('installs the removed version again when the target fails to install', async 
   expect(pnpm.mock.calls.map(call => call[1])).toEqual([
     // The update starts at the registry the package came from; a 404 there may be a mirror not yet synced, so pnpm's
     // own registry is asked too before the installation gives up.
-    ['remove', 'extra', `--config.registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-exact', `--registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-exact'],
-    ['add', 'extra@1.1.0', '--save-exact', `--registry=${MIRROR}`],
+    ['remove', 'extra', `--config.registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-prod', '--save-exact', `--registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-prod', '--save-exact'],
+    ['add', 'extra@1.1.0', '--save-prod', '--save-exact', `--registry=${MIRROR}`],
   ])
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.1.0')
 })
@@ -2369,7 +2369,7 @@ it('installs over the running version without HMR and reports the restart', asyn
     step: 'install', result: { application: 'restart-required', restartReason: 'no-hmr', version: '1.2.0' },
   })
   expect(steps).toEqual(['checking', 'installing'])
-  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['add', 'extra@1.2.0', '--save-exact']])
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['add', 'extra@1.2.0', '--save-prod', '--save-exact']])
 })
 
 it.each(['extra@^1.0.0', ' extra@1.0.0 ', 'https://user:secret@example.com/pkg'])('omits invalid exemption identity for %s', async (input) => {

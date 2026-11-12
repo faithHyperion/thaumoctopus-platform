@@ -834,13 +834,16 @@ export class PluginManager extends TypertRemoteService {
   ): Promise<RegistryAnswer> {
     const attempts: RegistryAttempt[] = []
     for (const [index, registry] of plan.entries()) {
-      const packageManager = this.profile.packageManager ?? { command: this.pnpmCommand, args: [], env: {} }
-      const env = { ...packageManager.env, ...userConfig === undefined ? {} : { NPM_CONFIG_USERCONFIG: userConfig } }
+      const packageManager = this.profile.packageManager ?? { command: this.pnpmCommand }
+      const inheritedEnv = this.profile.packageManager?.env ?? {}
+      const env = userConfig === undefined
+        ? undefined
+        : { ...inheritedEnv, NPM_CONFIG_USERCONFIG: userConfig }
       const view = await viewProfilePackage(this.profile.dir, spec, {
         ...packageManager,
-        env,
+        ...env === undefined ? {} : { env },
         fields, timeoutMs: this.inspectTimeoutMs, ...signal === undefined ? {} : { signal }, registry,
-      })
+      } satisfies Parameters<typeof viewProfilePackage>[2])
       const printed = view.stdout.replace(ANSI_SEQUENCE, '').trim()
       if (view.exitCode !== 0 || view.cause !== undefined || view.timedOut) {
         // pnpm prints a refusal as `{ error: { code, message } }` on stdout, with nothing on stderr.
@@ -995,6 +998,7 @@ export class PluginManager extends TypertRemoteService {
           run = await this.runPnpm(
             [
               'add', installSpec,
+              '--save-prod',
               ...options?.saveExact === true ? ['--save-exact'] : [],
               // An authorized private package is addressed by its scoped npmrc entry. A global
               // --registry would also send the package's dependencies to the private registry,
