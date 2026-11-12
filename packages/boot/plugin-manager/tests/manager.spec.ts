@@ -1177,7 +1177,7 @@ it('removes a package with the registry it was installed from, so pnpm verifies 
   onTestFinished(() => { pnpm.mockRestore() })
   expect(await manager.installBundle('mirrored', { enabled: false, registry: corp })).toMatchObject({ application: 'applied' })
   expect(await manager.removeBundle('mirrored')).toMatchObject({ application: 'applied' })
-  expect(pnpm.mock.calls.at(-1)?.[1]).toEqual(['remove', 'mirrored', `--config.registry=${corp}`])
+  expect(pnpm.mock.calls.at(-1)?.[1]).toEqual(['remove', 'mirrored', '--offline', `--config.registry=${corp}`])
   // A failed installation records no registry, and a failed removal keeps the recorded one for the retry.
   pnpm.mockResolvedValueOnce({ exitCode: 1, output: 'failed', truncated: false, logPath: join(dir, 'pnpm.log') })
   expect(await manager.installBundle('failing', { enabled: false, registry: corp })).toMatchObject({ application: 'failed' })
@@ -1185,13 +1185,13 @@ it('removes a package with the registry it was installed from, so pnpm verifies 
   pnpm.mockResolvedValueOnce({ exitCode: 1, output: 'remove failed', truncated: false, logPath: join(dir, 'pnpm.log') })
   expect(await manager.removeBundle('mirrored')).toMatchObject({ application: 'failed' })
   expect(await manager.removeBundle('mirrored')).toMatchObject({ application: 'applied' })
-  expect(pnpm.mock.calls.at(-1)?.[1]).toEqual(['remove', 'mirrored', `--config.registry=${corp}`])
+  expect(pnpm.mock.calls.at(-1)?.[1]).toEqual(['remove', 'mirrored', '--offline', `--config.registry=${corp}`])
   // A package this manager did not install is removed with the registry an installation asks first.
   bundle('mirrored', [])
   const manifest = readProfileManifest('test', dir)
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...manifest, dependencies: { ...manifest.dependencies, mirrored: '1.0.0' } }))
   await manager.removeBundle('mirrored')
-  expect(pnpm.mock.calls.at(-1)?.[1]).toEqual(['remove', 'mirrored'])
+  expect(pnpm.mock.calls.at(-1)?.[1]).toEqual(['remove', 'mirrored', '--offline'])
 })
 
 it('uses a temporary scoped npm auth config without exposing the token', async () => {
@@ -2182,7 +2182,7 @@ it('updates a registry bundle by removing it and installing the exact newer vers
   expect(updated).toMatchObject({ from: '1.0.0', to: '1.2.0', step: 'install', result: { application: 'applied', version: '1.2.0', enabled: true } })
   expect(updated.restore).toBeUndefined()
   expect(steps).toEqual(['checking', 'removing', 'installing'])
-  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['remove', 'extra'], ['add', 'extra@1.2.0', '--save-prod', '--save-exact', `--registry=${MIRROR}`]])
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['remove', 'extra', '--offline'], ['add', 'extra@1.2.0', '--save-prod', '--save-exact', `--registry=${MIRROR}`]])
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.2.0')
   expect(ctx.get('managedProbe')).toBe(true)
 })
@@ -2243,7 +2243,7 @@ it('uses temporary scoped auth configs for update installs and its failed-run re
   )).toBe(true)
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.0.0')
   expect(pnpm.mock.calls.map(call => call[1])).toEqual([
-    ['remove', 'extra'],
+    ['remove', 'extra', '--offline'],
     ['add', 'extra@1.2.0', '--save-prod', '--save-exact'],
     ['add', 'extra@1.0.0', '--save-prod', '--save-exact'],
   ])
@@ -2264,7 +2264,7 @@ it('installs the removed version again when the target fails to install', async 
   expect(pnpm.mock.calls.map(call => call[1])).toEqual([
     // The update starts at the registry the package came from; a 404 there may be a mirror not yet synced, so pnpm's
     // own registry is asked too before the installation gives up.
-    ['remove', 'extra', `--config.registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-prod', '--save-exact', `--registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-prod', '--save-exact'],
+    ['remove', 'extra', '--offline', `--config.registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-prod', '--save-exact', `--registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-prod', '--save-exact'],
     ['add', 'extra@1.1.0', '--save-prod', '--save-exact', `--registry=${MIRROR}`],
   ])
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.1.0')

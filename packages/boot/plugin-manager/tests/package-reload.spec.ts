@@ -270,7 +270,7 @@ it('keeps the running bundle resolution through later package operations without
     if (args[0] === 'add') {
       installOtherBundle(dir)
     } else {
-      expect(args).toEqual(['remove', 'other'])
+      expect(args).toEqual(['remove', 'other', '--offline'])
       const manifest = readProfileManifest('test', dir)
       delete manifest.dependencies?.other
       writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
@@ -325,7 +325,7 @@ it('removes a running bundle after its plugin stops and then publishes', async (
   expect(previous?.state).toBe(FiberState.ACTIVE)
   const sibling: unknown = ctx.get('packageReloadSibling')
   const pnpm = mockPnpm(dir, trace, (args) => {
-    expect(args).toEqual(['remove', 'addon'])
+    expect(args).toEqual(['remove', 'addon', '--offline'])
     expect(entry()).toBeUndefined()
     removeFiles(dir)
   })
@@ -353,7 +353,7 @@ it('removes and publishes a bundle that is not running without HMR', async () =>
   expect(ctx.pluginPackages.packageOf('addon', parentURL)?.version).toBe('1.0.0')
   const sibling: unknown = ctx.get('packageReloadSibling')
   const pnpm = mockPnpm(dir, trace, (args) => {
-    expect(args).toEqual(['remove', 'addon'])
+    expect(args).toEqual(['remove', 'addon', '--offline'])
     removeFiles(dir)
   })
 

@@ -128,6 +128,7 @@ it('opens an installed catalog plugin from its card while keeping update separat
 
   expect(view.getByRole('button', { name: en.open })).toBeTruthy()
   expect(view.getByRole('button', { name: en.update })).toBeTruthy()
+  expect(view.queryByText(en.entryUnavailable)).toBeNull()
   fireEvent.click(view.getByRole('button', { name: en.open }))
   expect(view.container.querySelector('[data-workbench-tile="legal"]')).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: LEGAL.label }))
@@ -148,6 +149,7 @@ it('does not offer opening a plugin without a registered tile', () => {
   })
   const view = render(<WorkbenchPage {...b.props} />)
   expect(view.queryByRole('button', { name: en.open })).toBeNull()
+  expect(view.getByText(en.entryUnavailable)).toBeTruthy()
   expect(view.getByRole('button', { name: en.update })).toBeTruthy()
 })
 

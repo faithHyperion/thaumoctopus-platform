@@ -1140,7 +1140,14 @@ export class PluginManager extends TypertRemoteService {
       // `pnpm remove` takes no `--registry` option; the generic configuration flag sets the same setting. A package
       // installed before this process started is removed with the registry an installation asks first.
       const registry = this.installedFrom.has(name) ? this.installedFrom.get(name) : this.configuredRegistries.registry
-      result.packageResult = await this.runPnpm(['remove', name, ...typeof registry === 'string' ? [`--config.registry=${registry}`] : []])
+      result.packageResult = await this.runPnpm([
+        'remove', name,
+        // Removal re-resolves the remaining profile dependencies. A private
+        // package still in the lockfile must not be re-read from the public
+        // registry; the local store already holds the installed closure.
+        '--offline',
+        ...typeof registry === 'string' ? [`--config.registry=${registry}`] : [],
+      ])
       if (result.packageResult.exitCode !== 0 || result.packageResult.timedOut === true) {
         throw new Error(result.packageResult.output)
       }

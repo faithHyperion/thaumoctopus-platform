@@ -299,9 +299,17 @@
   align-self: flex-start;
 }
 
-.stateTag {
+.stateTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-self: flex-start;
   margin: -4px 0 10px;
+}
+
+.stateTag {
+  align-self: flex-start;
+  margin: 0;
   padding: 2px 7px;
   border-radius: 3px;
   font-size: 11px;
@@ -315,6 +323,11 @@
 .stateTag.disabled {
   background: #f3e7d9;
   color: #7b501b;
+}
+
+.stateTag.entryUnavailable {
+  background: #eef1f3;
+  color: #5d6870;
 }
 
 .cardActions {

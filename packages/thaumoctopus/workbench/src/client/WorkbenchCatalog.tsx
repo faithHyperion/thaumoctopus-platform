@@ -201,9 +201,16 @@ export function WorkbenchCatalog({
                           </dl>
 
                           {installed !== undefined && (
-                            <span className={`${css.stateTag} ${installed.enabled ? css.enabled : css.disabled}`}>
-                              {installed.enabled ? t('enabled') : t('disabled')}
-                            </span>
+                            <div className={css.stateTags}>
+                              <span className={`${css.stateTag} ${installed.enabled ? css.enabled : css.disabled}`}>
+                                {installed.enabled ? t('enabled') : t('disabled')}
+                              </span>
+                              {installed.enabled && !openable && (
+                                <span className={`${css.stateTag} ${css.entryUnavailable}`}>
+                                  {t('entryUnavailable')}
+                                </span>
+                              )}
+                            </div>
                           )}
 
                           <div className={css.cardActions}>
