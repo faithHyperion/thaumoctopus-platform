@@ -1142,10 +1142,10 @@ export class PluginManager extends TypertRemoteService {
       const registry = this.installedFrom.has(name) ? this.installedFrom.get(name) : this.configuredRegistries.registry
       result.packageResult = await this.runPnpm([
         'remove', name,
-        // Removal re-resolves the remaining profile dependencies. A private
-        // package still in the lockfile must not be re-read from the public
-        // registry; the local store already holds the installed closure.
-        '--offline',
+        // Removal re-verifies the remaining lockfile entries. `remove` has no
+        // `--offline` option; trusting the already-installed lockfile keeps a
+        // private package from being re-read from the public registry.
+        '--trust-lockfile',
         ...typeof registry === 'string' ? [`--config.registry=${registry}`] : [],
       ])
       if (result.packageResult.exitCode !== 0 || result.packageResult.timedOut === true) {
