@@ -24,14 +24,27 @@ console.log(`thaumoctopus: DSH_HOME=${home}`)
 
 if (!existsSync(profileDir)) {
   mkdirSync(profileDir, { recursive: true })
-  for (const entry of ['cordis.yml', 'cordis.patch.yml', 'package.json']) {
+  for (const entry of ['.npmrc', 'cordis.yml', 'cordis.patch.yml', 'package.json']) {
     copyFileSync(join(sourceProfile, entry), join(profileDir, entry))
   }
   console.log(`thaumoctopus: provisioned profile at ${profileDir}`)
 } else {
-  // The patch layer is repo-owned: re-sync it so mount changes reach an
-  // already-provisioned profile. User-owned state (bundles, settings) stays.
+  // The npmrc and patch layer are repo-owned: re-sync them so layout and mount
+  // changes reach an already-provisioned profile. User-owned state (bundles,
+  // settings) stays.
   copyFileSync(join(sourceProfile, 'cordis.patch.yml'), join(profileDir, 'cordis.patch.yml'))
+  copyFileSync(join(sourceProfile, '.npmrc'), join(profileDir, '.npmrc'))
+}
+
+// A profile installed before the hoisted layout keeps its version-pinned
+// virtual store under node_modules/.pnpm. pnpm does not convert layouts in
+// place: such plugins must be reinstalled (through the Workbench, so the
+// private registry grants are re-issued) before updates hot-apply.
+if (existsSync(join(profileDir, 'node_modules', '.pnpm'))) {
+  console.log(
+    'thaumoctopus: this profile still holds the isolated-layout node_modules. '
+    + 'Reinstall its plugins from the Workbench catalog to enable in-place hot updates.',
+  )
 }
 
 const child = spawn('pnpm', ['dsh', profileName], {
