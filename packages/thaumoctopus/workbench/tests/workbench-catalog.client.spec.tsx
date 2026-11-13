@@ -46,6 +46,7 @@ function fixture(state: Partial<WorkbenchCatalogState> = {}) {
     refresh: vi.fn(async () => {}),
     install: vi.fn(async () => {}),
     update: vi.fn(async () => {}),
+    confirmRestart: vi.fn(async () => {}),
     setEnabled: vi.fn(async () => {}),
     uninstall: vi.fn(async () => {}),
     select: vi.fn(async () => {}),
@@ -157,4 +158,32 @@ it('loads and shows release history and install logs', async () => {
   expect(view.getByText('Fixed clause comparison.')).toBeTruthy()
   expect(view.getByText('pnpm add @thaumoctopus/plugin-legal@1.2.0')).toBeTruthy()
   expect(view.getByText('Done')).toBeTruthy()
+})
+
+it('shows the restart confirmation dialog only while a restart is required', async () => {
+  const { view } = fixture({ status: 'ready', user: USER, items: [ITEM] })
+  expect(view.queryByText(en.restartDialogBody)).toBeNull()
+  expect(view.queryByText(en.applying)).toBeNull()
+
+  view.unmount()
+  const restart = fixture({
+    status: 'ready',
+    user: USER,
+    items: [ITEM],
+    operationStates: { legal: { type: 'update', phase: 'restart-required' } },
+  })
+  expect(restart.view.getByText(en.restartDialogBody)).toBeTruthy()
+  fireEvent.click(restart.view.getByRole('button', { name: en.confirmRestart }))
+  await vi.waitFor(() => { expect(restart.actions.confirmRestart).toHaveBeenCalledWith(ITEM) })
+})
+
+it('marks an in-flight apply with the finishing-update tag instead of an error', () => {
+  const { view } = fixture({
+    status: 'ready',
+    user: USER,
+    items: [ITEM],
+    installedStates: { '@thaumoctopus/plugin-legal': { version: '1.2.0', enabled: true } },
+    operationStates: { legal: { type: 'update', phase: 'restarting-host' } },
+  })
+  expect(view.getByText(en.applying)).toBeTruthy()
 })

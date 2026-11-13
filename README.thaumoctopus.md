@@ -47,6 +47,12 @@ pnpm run build:thaumoctopus                       # 本地验证构建（登录�
 
 Workbench 会显示插件目录的安装、更新和已安装状态。刷新时会从 Plugin Manager 读取已安装版本；目录版本更新后，卡片会显示“更新”，更新失败时会尝试恢复原版本。已安装插件支持启用、停用和卸载，目录支持搜索与分类过滤，详情页展示发布历史和最近一次安装日志。
 
+### 插件更新自动生效
+
+插件更新返回“需要重启”时，Workbench 会自动走受控重启流程：调用 supervisor 重启 Host，等待 Web 端口恢复后自动刷新页面，全程显示“正在完成更新”，用户不需要手动刷新或重启。页面恢复后会核对磁盘安装版本与目标版本一致才显示更新完成；核对失败或超时会明确报错，不会假装成功。只有 supervisor 不可用或自动重启失败时，才会弹出确认框，由用户点击“确定并重启”重试。
+
+supervisor 由 `scripts/thaumoctopus/supervisor.mjs` 提供：它托管 `start-web.mjs` 子进程，在 `127.0.0.1:18099`（可用 `THAUMOCTOPUS_SUPERVISOR_PORT` 覆盖）暴露 `POST /restart`、`GET /host`、`GET /healthz`，并用 `THAUMOCTOPUS_WEB_PORT`（默认 3080）探测 Host 是否就绪。`pnpm run dev:thaumoctopus` 已默认通过 supervisor 启动 Host；直接运行 `node scripts/thaumoctopus/supervisor.mjs` 可以单独启动受控 Host。没有 supervisor 时（例如直接运行 `start-web.mjs`），更新后会停在确认框等待用户操作。
+
 ### 开发调试
 
 边开发边看效果用 `pnpm run dev:thaumoctopus`：它同时跑仓库标准重建 watcher（tsc / tsdown / vite）和品牌 profile 服务，改 `src/client` 插件代码、品牌 slot 或 Web shell 后浏览器自动刷新。一次启动挂整个开发时段，不是每个功能一条命令。首次使用前先完整构建一次（`pnpm run build`），之后冷启动大改动加 `--full-build`。注意 dev 循环运行期间不要再跑 `pnpm run build`，两者写同一批 `lib/` 产物。

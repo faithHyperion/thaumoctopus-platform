@@ -30,6 +30,7 @@ interface WorkbenchCatalogProps extends PropsLocale<'workbench'> {
   readonly refresh: () => Promise<void>
   readonly install: (item: CatalogItem) => Promise<void>
   readonly update: (item: CatalogItem) => Promise<void>
+  readonly confirmRestart: (item: CatalogItem) => Promise<void>
   readonly setEnabled: (item: CatalogItem, enabled: boolean) => Promise<void>
   readonly uninstall: (item: CatalogItem) => Promise<void>
   readonly select: (pluginId: string | undefined) => Promise<void>
@@ -39,7 +40,7 @@ const DEFAULT_EMAIL = process.env.DSH_CLIENT_THAUMOCTOPUS_DEFAULT_EMAIL ?? ''
 const DEFAULT_PASSWORD = process.env.DSH_CLIENT_THAUMOCTOPUS_DEFAULT_PASSWORD ?? ''
 
 export function WorkbenchCatalog({
-  useCatalog, openablePluginIds, openTile, login, logout, refresh, install, update, setEnabled, uninstall, select, t,
+  useCatalog, openablePluginIds, openTile, login, logout, refresh, install, update, confirmRestart, setEnabled, uninstall, select, t,
 }: WorkbenchCatalogProps) {
   const state = useCatalog(snapshot => snapshot)
   const [email, setEmail] = useState(DEFAULT_EMAIL)
@@ -72,6 +73,10 @@ export function WorkbenchCatalog({
   const selectedItem = state.selectedPluginId === undefined
     ? undefined
     : state.items.find(item => item.pluginId === state.selectedPluginId)
+  const restartItem = state.items.find((item) => {
+    const operation = state.operationStates[item.pluginId]
+    return (operation?.type === 'update' || operation?.type === 'install') && operation.phase === 'restart-required'
+  })
 
   return (
     <section className={css.catalog} aria-labelledby="workbench-catalog-title">
@@ -205,10 +210,8 @@ export function WorkbenchCatalog({
                               <span className={`${css.stateTag} ${installed.enabled ? css.enabled : css.disabled}`}>
                                 {installed.enabled ? t('enabled') : t('disabled')}
                               </span>
-                              {installed.enabled && !openable && (
-                                <span className={`${css.stateTag} ${css.entryUnavailable}`}>
-                                  {t('entryUnavailable')}
-                                </span>
+                              {applyingPhase(operation) && (
+                                <span className={`${css.stateTag} ${css.applying}`}>{t('applying')}</span>
                               )}
                             </div>
                           )}
@@ -282,6 +285,22 @@ export function WorkbenchCatalog({
                   onClose={() => { void select(undefined) }}
                   t={t}
                 />
+              )}
+
+              {restartItem !== undefined && (
+                <div className={css.restartOverlay} role="alertdialog" aria-modal="true">
+                  <div className={css.restartDialog}>
+                    <h3>{t('restartDialogTitle')}</h3>
+                    <p>{t('restartDialogBody')}</p>
+                    <button
+                      type="button"
+                      className={css.installButton}
+                      onClick={() => { void confirmRestart(restartItem) }}
+                    >
+                      {t('confirmRestart')}
+                    </button>
+                  </div>
+                </div>
               )}
             </>
           )}
@@ -373,8 +392,16 @@ function operationLabel(
     return operation.type === 'update' ? t('updating') : t('installing')
   }
   if (operation?.phase === 'failed') return action === 'update' ? t('retryUpdate') : t('retryInstall')
+  if (applyingPhase(operation)) return t('applying')
   if (operation?.phase === 'restart-required') return t('restartRequired')
   if (action === 'update') return t('update')
   if (action === 'installed') return t('installed')
   return t('install')
+}
+
+function applyingPhase(operation: WorkbenchOperationState | undefined): boolean {
+  return operation?.phase === 'applying'
+    || operation?.phase === 'restarting-host'
+    || operation?.phase === 'reconnecting'
+    || operation?.phase === 'verifying'
 }

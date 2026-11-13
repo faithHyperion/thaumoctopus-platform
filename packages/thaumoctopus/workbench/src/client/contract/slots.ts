@@ -67,6 +67,8 @@ export interface WorkbenchPageInjected {
   install: (item: CatalogItem) => Promise<void>
   /** Request grants for the installed and target versions, then update the bundle. */
   update: (item: CatalogItem) => Promise<void>
+  /** Re-run the controlled host restart after an automatic attempt failed. */
+  confirmRestart: (item: CatalogItem) => Promise<void>
   /** Enable or disable an installed bundle. */
   setEnabled: (item: CatalogItem, enabled: boolean) => Promise<void>
   /** Remove an installed bundle. */

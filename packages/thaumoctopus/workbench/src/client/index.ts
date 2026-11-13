@@ -25,6 +25,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkbenchPageInjected, WorkbenchTileMetadata } from './contract/slots.ts'
 import { ControlPlaneClient } from './control-plane.ts'
 import { WorkbenchCatalogController } from './catalog-controller.ts'
+import { HostSupervisorClient, supervisorBaseUrl } from './supervisor.ts'
 import { WorkbenchIcon } from './WorkbenchIcon.tsx'
 import { WorkbenchPage } from './WorkbenchPage.tsx'
 import { en, zh, type WorkbenchKey } from './locales.ts'
@@ -59,6 +60,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workbench: dictionaries')
   const t = ctx.locale.bind(NS)
   const controlPlaneUrl = (process.env.DSH_CLIENT_THAUMOCTOPUS_CONTROL_PLANE_URL ?? 'http://localhost:18080').replace(/\/+$/, '')
+  const supervisor = new HostSupervisorClient(supervisorBaseUrl())
   const catalogController = new WorkbenchCatalogController(
     new ControlPlaneClient(controlPlaneUrl),
     (spec, options) => ctx.remote.pluginManager.installBundle(spec, options),
@@ -66,6 +68,12 @@ export function apply(ctx: ClientContext): void {
     (name, version, options) => ctx.remote.pluginManager.updateBundle(name, version, options),
     (name, enabled) => ctx.remote.pluginManager.setBundleEnabled(name, enabled),
     name => ctx.remote.pluginManager.removeBundle(name),
+    {
+      restartHost: () => supervisor.restart(),
+      hostStatus: () => supervisor.status(),
+      reloadPage: () => { location.reload() },
+    },
+    typeof sessionStorage === 'undefined' ? undefined : sessionStorage,
   )
   const catalogFace = catalogController.face()
 
@@ -110,6 +118,7 @@ export function apply(ctx: ClientContext): void {
       refresh: catalogFace.refresh,
       install: catalogFace.install,
       update: catalogFace.update,
+      confirmRestart: catalogFace.confirmRestart,
       setEnabled: catalogFace.setEnabled,
       uninstall: catalogFace.uninstall,
       select: catalogFace.select,

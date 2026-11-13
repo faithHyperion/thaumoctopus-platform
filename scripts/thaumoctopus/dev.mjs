@@ -28,7 +28,7 @@ const devArgs = ['--import', 'tsx/esm', 'scripts/dev-web.ts', '--no-serve']
 if (!fullBuild) devArgs.push('--skip-build')
 
 const watchers = spawn(process.execPath, devArgs, { cwd: repoRoot, env, stdio: 'inherit' })
-const server = spawn(process.execPath, [join('scripts', 'thaumoctopus', 'start-web.mjs')], {
+const server = spawn(process.execPath, [join('scripts', 'thaumoctopus', 'supervisor.mjs')], {
   cwd: repoRoot,
   env,
   stdio: 'inherit',

@@ -5,6 +5,7 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginInstallRequestId } from '@deepseek-ai/dsh-api-remotes/client'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import type { CatalogItem, ControlPlaneClient, ControlPlaneUser, PluginVersionInfo } from './control-plane.ts'
+import type { HostSupervisorStatus } from './supervisor.ts'
 
 export interface InstallBundleCall {
   (
@@ -94,8 +95,36 @@ export type InstallBundleResult =
 
 export type WorkbenchCatalogStatus = 'anonymous' | 'loading' | 'ready' | 'error'
 export type WorkbenchOperationType = 'install' | 'update' | 'enable' | 'disable' | 'uninstall'
-export type WorkbenchOperationPhase = 'running' | 'applied' | 'restart-required' | 'failed'
+export type WorkbenchOperationPhase =
+  | 'running'
+  | 'applying'
+  | 'verifying'
+  | 'restarting-host'
+  | 'reconnecting'
+  | 'applied'
+  | 'restart-required'
+  | 'failed'
 export type WorkbenchPackageAction = 'install' | 'update' | 'installed'
+
+/** Host restart controls injected so tests can observe the apply flow. */
+export interface WorkbenchRestartControls {
+  readonly restartHost: () => Promise<void>
+  readonly hostStatus: () => Promise<HostSupervisorStatus>
+  readonly reloadPage: () => void
+  readonly waitMs?: (ms: number) => Promise<void>
+}
+
+/** Verification state that must survive the page reload after a restart. */
+interface PendingVerify {
+  readonly pluginId: string
+  readonly packageName: string
+  readonly targetVersion: string
+  readonly type: WorkbenchOperationType
+  readonly startedAt: number
+}
+
+const PENDING_VERIFY_KEY = 'thaumoctopus.workbench.pendingVerify'
+const PENDING_VERIFY_TIMEOUT_MS = 120_000
 
 export interface WorkbenchOperationState {
   readonly type: WorkbenchOperationType
@@ -156,12 +185,21 @@ export class WorkbenchCatalogController {
     private readonly updateBundle: UpdateBundleCall,
     private readonly setBundleEnabled: SetBundleEnabledCall,
     private readonly removeBundle: RemoveBundleCall,
+    private readonly restart?: WorkbenchRestartControls,
+    private readonly storage?: Pick<Storage, 'getItem' | 'removeItem' | 'setItem'>,
   ) {
     this.store = createSnapshotStore<WorkbenchCatalogState>({
       ...INITIAL,
       user: client.currentUser(),
       status: client.hasSession() ? 'loading' : 'anonymous',
     })
+    const pending = this.readPendingVerify()
+    if (pending !== undefined) {
+      this.store.set({
+        ...this.store.getSnapshot(),
+        operationStates: { [pending.pluginId]: { type: pending.type, phase: 'verifying' } },
+      })
+    }
   }
 
   face(): {
@@ -174,6 +212,7 @@ export class WorkbenchCatalogController {
     setEnabled: (item: CatalogItem, enabled: boolean) => Promise<void>
     uninstall: (item: CatalogItem) => Promise<void>
     select: (pluginId: string | undefined) => Promise<void>
+    confirmRestart: (item: CatalogItem) => Promise<void>
   } {
     return {
       hooks: { catalog: this.store },
@@ -185,6 +224,7 @@ export class WorkbenchCatalogController {
       setEnabled: (item, enabled) => this.setEnabled(item, enabled),
       uninstall: item => this.uninstall(item),
       select: pluginId => this.select(pluginId),
+      confirmRestart: item => this.confirmRestart(item),
     }
   }
 
@@ -236,7 +276,10 @@ export class WorkbenchCatalogController {
       const user = this.client.currentUser()
       if (user === undefined) throw new Error('The Workbench session is unavailable')
       const [items, installedStates] = await Promise.all([this.client.catalog(), this.readInstalledStates()])
-      this.patch({ status: 'ready', user, items, installedStates })
+      const pending = this.readPendingVerify()
+      this.patch(pending === undefined
+        ? { status: 'ready', user, items, installedStates }
+        : { status: 'ready', user, items, installedStates, ...this.settlePendingVerify(pending, installedStates) })
     } catch (error) {
       this.patch({ status: 'error', message: messageOf(error) })
     } finally {
@@ -255,6 +298,99 @@ export class WorkbenchCatalogController {
     }
   }
 
+  private async confirmRestart(item: CatalogItem): Promise<void> {
+    const operation = this.store.getSnapshot().operationStates[item.pluginId]
+    await this.applyPendingRestart(item, operation?.type ?? 'update')
+  }
+
+  private async applyPendingRestart(item: CatalogItem, type: WorkbenchOperationType): Promise<void> {
+    const pluginId = item.pluginId
+    if (this.restart === undefined) {
+      // No supervisor is reachable; the confirm dialog stays visible instead.
+      this.patchOperationPhase(pluginId, type, 'restart-required')
+      return
+    }
+    this.patchOperationPhase(pluginId, type, 'restarting-host')
+    try {
+      await this.restart.restartHost()
+    } catch (error) {
+      this.patchOperationPhase(pluginId, type, 'restart-required')
+      this.patch({ message: messageOf(error) })
+      return
+    }
+    if (!(await this.waitForHostRunning())) {
+      this.patchOperationPhase(pluginId, type, 'restart-required')
+      return
+    }
+    this.patchOperationPhase(pluginId, type, 'reconnecting')
+    this.savePendingVerify({ pluginId, packageName: item.packageName, targetVersion: item.version, type, startedAt: Date.now() })
+    this.restart.reloadPage()
+  }
+
+  private settlePendingVerify(
+    pending: PendingVerify,
+    installedStates: Readonly<Record<string, InstalledPluginState>>,
+  ): Partial<WorkbenchCatalogState> {
+    const installed = installedStates[pending.packageName]
+    if (installed !== undefined && installed.version === pending.targetVersion) {
+      this.clearPendingVerify()
+      return {
+        operationStates: { ...this.store.getSnapshot().operationStates, [pending.pluginId]: { type: pending.type, phase: 'applied' } },
+      }
+    }
+    if (installed === undefined || Date.now() - pending.startedAt > PENDING_VERIFY_TIMEOUT_MS) {
+      this.clearPendingVerify()
+      return {
+        operationStates: { ...this.store.getSnapshot().operationStates, [pending.pluginId]: { type: pending.type, phase: 'failed' } },
+        message: installed === undefined
+          ? 'The updated plugin is no longer installed'
+          : 'The updated version did not finish loading',
+      }
+    }
+    return {}
+  }
+
+  private readPendingVerify(): PendingVerify | undefined {
+    if (this.storage === undefined) return undefined
+    try {
+      const raw = this.storage.getItem(PENDING_VERIFY_KEY)
+      return raw === null ? undefined : JSON.parse(raw) as PendingVerify
+    } catch {
+      this.clearPendingVerify()
+      return undefined
+    }
+  }
+
+  private savePendingVerify(pending: PendingVerify): void {
+    try {
+      this.storage?.setItem(PENDING_VERIFY_KEY, JSON.stringify(pending))
+    } catch {
+      // Storage being unavailable keeps the flow working without verification.
+    }
+  }
+
+  private clearPendingVerify(): void {
+    try {
+      this.storage?.removeItem(PENDING_VERIFY_KEY)
+    } catch {
+      // Nothing else to do when storage is unavailable.
+    }
+  }
+
+  private async waitForHostRunning(timeoutMs = 90_000, pollMs = 500): Promise<boolean> {
+    if (this.restart === undefined) return false
+    const waitMs = this.restart.waitMs ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)))
+    for (let waited = 0; waited < timeoutMs; waited += pollMs) {
+      await waitMs(pollMs)
+      try {
+        if ((await this.restart.hostStatus()).state === 'running') return true
+      } catch {
+        // The supervisor may itself be restarting; keep polling until the deadline.
+      }
+    }
+    return false
+  }
+
   private async install(item: CatalogItem): Promise<void> {
     const requestId = randomUUID() as PluginInstallRequestId
     this.activeRequests.set(requestId, item.pluginId)
@@ -270,6 +406,9 @@ export class WorkbenchCatalogController {
       })
       this.settleCallResult(item.pluginId, 'install', result)
       await this.syncInstalledStates()
+      if (result.ok && result.value.application === 'restart-required') {
+        await this.applyPendingRestart(item, 'install')
+      }
     } catch (error) {
       this.failOperation(item.pluginId, 'install', error)
     } finally {
@@ -298,9 +437,20 @@ export class WorkbenchCatalogController {
       if (!answer.ok || answer.value === undefined) {
         throw new Error(answer.error?.message ?? 'The plugin update failed')
       }
-      this.settleChangeResult(item.pluginId, 'update', answer.value.result)
+      const { result, restore } = answer.value
+      const rolledBack = restore !== undefined
+        && (restore.application === 'applied' || restore.application === 'restart-required')
+      if ((result.application === 'failed' || result.application === 'cancelled') && rolledBack) {
+        const reason = result.error?.diagnostic ?? result.error?.code ?? 'The plugin update failed'
+        this.failOperation(item.pluginId, 'update', new Error(`${reason}; version ${installed.version} was restored`))
+        return
+      }
+      this.settleChangeResult(item.pluginId, 'update', result)
       await this.syncInstalledStates()
       await this.select(item.pluginId)
+      if (answer.value.result.application === 'restart-required') {
+        await this.applyPendingRestart(item, 'update')
+      }
     } catch (error) {
       this.failOperation(item.pluginId, 'update', error)
     } finally {
@@ -356,6 +506,12 @@ export class WorkbenchCatalogController {
     this.patch({
       operationStates: { ...this.store.getSnapshot().operationStates, [pluginId]: { type, phase: 'running' } },
       message: undefined,
+    })
+  }
+
+  private patchOperationPhase(pluginId: string, type: WorkbenchOperationType, phase: WorkbenchOperationPhase): void {
+    this.patch({
+      operationStates: { ...this.store.getSnapshot().operationStates, [pluginId]: { type, phase } },
     })
   }
 

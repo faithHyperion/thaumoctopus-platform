@@ -22,7 +22,7 @@ const TILE_GLYPH_SIZE = 24
  * @returns the page element tree.
  */
 export function WorkbenchPage({
-  renderSlot, useTiles, useCatalog, login, logout, refresh, install, update, setEnabled, uninstall, select, t,
+  renderSlot, useTiles, useCatalog, login, logout, refresh, install, update, confirmRestart, setEnabled, uninstall, select, t,
 }: WorkbenchPageComponentProps) {
   const tiles = useTiles(snapshot => snapshot)
   const openablePluginIds = useMemo(() => new Set(tiles.map(tile => tile.id)), [tiles])
@@ -66,6 +66,7 @@ export function WorkbenchPage({
         refresh={refresh}
         install={install}
         update={update}
+        confirmRestart={confirmRestart}
         setEnabled={setEnabled}
         uninstall={uninstall}
         select={select}
